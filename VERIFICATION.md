@@ -587,3 +587,25 @@ cannot execute UI assertions here: loopback binding returns EPERM and Chromium
 terminates with sandbox_host_linux.cc / Operation not permitted. The race is
 identified from the state/refresh sequence; a successful host rerun is still
 required to confirm browser behavior. No production changes.
+
+## Compact mobile library (2026-10-21)
+
+The approved brief is implemented as a separate feature after the import-reveal
+fix. See `docs/MOBILE-LIBRARY.md` for behavior, browser commands, screenshot paths
+and limits, and `docs/PDF-METADATA-INVESTIGATION.md` for the separately reproduced
+empty-field parser defect. No metadata rewrite is included.
+
+`npm run verify` passes types, lint, all 50 existing regressions, and build.
+`node scripts/inspect-empty-pdf-metadata.mjs` passes its actual Poppler reproduction
+and produces the exact Subject:/Creator: corruption from synthetic empty fields.
+The new Playwright suite uses actual isolated HTTP/PDF data, bounded phone/tablet/
+desktop layouts and real downloads; no DOM dimension mocks or weakened assertions.
+`npm run test:browser` and the responsive-only attempt cannot execute UI assertions:
+listen EPERM on 127.0.0.1:3491 and Chromium sandbox_host_linux.cc / Operation not
+permitted. New screenshots are therefore unavailable here; host browser and visual
+review remain outstanding. Physical devices have not been tested.
+
+The checkout's `.git` rejects index.lock as read-only. Delivery uses two new commits
+in an isolated writable Git directory and a bundle with explicit branch refs;
+the three imported commits are unchanged. Working files match the feature tip.
+No production data, configuration, restart, deployment or push was performed.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, patch, type Label, type Library, type PaperDetail, type SavePaper } from './api';
+import { ActionMenu } from './action-menu';
 import { AssignmentCheckbox } from './assignment-checkbox';
 import { normalizePdfFilename, pdfFilenameProblem } from '../server/filename';
 
@@ -122,6 +123,19 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
     const [state, setState] = useState('Saved');
     const [error, setError] = useState('');
     const [expanded, setExpanded] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const editor = useRef<HTMLElement>(null);
+    const editorFocus = useRef<'organize' | 'filename' | null>(null);
+    useEffect(() => {
+        if (!expanded || !editorFocus.current) return;
+        const target = editorFocus.current === 'filename' ? editor.current?.querySelector<HTMLInputElement>('[aria-label="PDF filename"]') : editor.current;
+        target?.focus(); editorFocus.current = null;
+    }, [expanded]);
+    const expand = (target: 'organize' | 'filename') => {
+        if (expanded) {
+            (target === 'filename' ? editor.current?.querySelector<HTMLInputElement>('[aria-label="PDF filename"]') : editor.current)?.focus();
+        } else { editorFocus.current = target; setExpanded(true); }
+    };
     const update = (value: PaperDetail) => { current.current = value; setPaper(value); };
     useEffect(() => {
         if (!pending.current && !failed.current && initial.revision > current.current.revision) {
@@ -150,16 +164,31 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
             failed.current = false; setError(''); setState('Saved'); await onChanged();
         } catch (error) { setError(message(error)); }
     };
-    return <div className="library-paper-controls">
-        <button aria-expanded={expanded} aria-controls={`organize-${paper.id}`} onClick={() => setExpanded(!expanded)}>Organize paper</button>
-        <PaperActions paper={paper} onSave={save} disabled={failed.current} onError={setError} onDelete={async () => {
+    const remove = async () => {
+        setRemoving(true);
+        try {
             await queue.current;
             if (failed.current) throw new Error('Reload the latest paper before deleting.');
-            try { await deletePaper(current.current); onDeleted(); await onChanged(); }
-            catch (error) { failed.current = true; setState('Save error'); throw error; }
-        }}/>
-        <span role="status">{state}</span>
+            await deletePaper(current.current); onDeleted(); await onChanged();
+        } catch (error) { failed.current = true; setState('Save error'); throw error; }
+        finally { setRemoving(false); }
+    };
+    return <div className="library-paper-controls">
+        <div className="mobile-paper-menu"><ActionMenu label={`Actions for paper ${paper.title}`}>{close => <>
+            <button role="menuitem" tabIndex={-1} onClick={() => { close(); expand('organize'); }}>Organize paper</button>
+            {paper.pdfSha && <button role="menuitem" tabIndex={-1} onClick={() => { close(); expand('filename'); }}>Rename PDF</button>}
+            <button role="menuitem" tabIndex={-1} disabled={failed.current || removing || state === 'Saving…'} onClick={() => { close(); void save({ archived: !paper.archived }).catch(error => setError(message(error))); }}>{paper.archived ? 'Return to library' : 'Archive paper'}</button>
+            {paper.archived && <button role="menuitem" tabIndex={-1} className="danger" disabled={failed.current || removing || state === 'Saving…'} onClick={() => {
+                close();
+                if (confirm(`Permanently delete “${paper.title}”? This irreversibly removes this paper, its original PDF, notes, highlights, reading position and all project/tag assignments. Projects, tags and other papers are kept. This cannot be undone.`)) void remove().catch(error => setError(message(error)));
+            }}>Permanently delete</button>}
+        </>}</ActionMenu></div>
+        <div className="library-direct-actions">
+        <button aria-expanded={expanded} aria-controls={`organize-${paper.id}`} onClick={() => setExpanded(!expanded)}>Organize paper</button>
+        <PaperActions paper={paper} onSave={save} disabled={failed.current} onError={setError} onDelete={remove}/>
+        </div>
+        <span role="status" data-save-state={state}>{state}</span>
         {error && <div className="alert" role="alert">{error}<button onClick={() => void reload()}>Reload latest</button></div>}
-        {expanded && <section id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><PdfFilenameEditor paper={paper} onSave={save} disabled={failed.current}/><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
+        {expanded && <section ref={editor} tabIndex={-1} id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><div className="mobile-organize-heading"><strong>Organize paper</strong><button aria-label="Close paper organizer" onClick={() => { setExpanded(false); document.getElementById(`paper-row-${paper.id}`)?.querySelector<HTMLButtonElement>('.paper-menu-trigger')?.focus(); }}>×</button></div><PdfFilenameEditor paper={paper} onSave={save} disabled={failed.current}/><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
     </div>;
 }

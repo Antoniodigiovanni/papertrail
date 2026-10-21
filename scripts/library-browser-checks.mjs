@@ -152,7 +152,8 @@ export async function libraryManagementChecks(browser, base) {
     await page.getByRole('button', { name: 'Back to library', exact: true }).click();
     const second = row('Library orphan paper');
     await page.setViewportSize({ width: 390, height: 844 });
-    await second.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await second.getByRole('button', { name: 'Actions for paper Library orphan paper', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Organize paper', exact: true }).click();
     await second.getByRole('button', { name: 'Remove tag library-evidence', exact: true }).waitFor();
     await second.getByLabel('Library retained', { exact: true }).check(); await waitSaved(page);
     await second.getByLabel('Library retained', { exact: true }).uncheck(); await waitSaved(page);

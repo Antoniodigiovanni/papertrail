@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { libraryManagementChecks } from './library-browser-checks.mjs';
 import { importLibraryChecks } from './import-browser-checks.mjs';
+import { mobileLibraryChecks } from './mobile-library-checks.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -26,9 +27,12 @@ try{
   if(!started)errors.push(`Live HTTP server could not start/reply:\n${serverOutput}`);
   try{browser=await chromium.launch({headless:true});}catch(e){errors.push(`Chromium could not launch:\n${e.message}`);}
   if(errors.length)throw new Error(errors.join('\n\n'));
-  await importLibraryChecks(browser,base);
-  await libraryManagementChecks(browser,base);
-  if (!process.env.PAPERTRAIL_LIBRARY_ONLY) {
+  if (!process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
+    await importLibraryChecks(browser,base);
+    await libraryManagementChecks(browser,base);
+  }
+  await mobileLibraryChecks(browser,base);
+  if (!process.env.PAPERTRAIL_LIBRARY_ONLY && !process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage();const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
   const favicon=await context.request.get(`${base}/favicon.svg`);assert.equal(favicon.status(),200);assert.match(favicon.headers()['content-type'],/image\/svg\+xml/);assert.match(await favicon.text(),/<svg/);
