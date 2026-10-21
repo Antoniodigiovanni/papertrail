@@ -9,6 +9,16 @@ export function ActionMenu({ label, children }: { label: string; children: (clos
     const close = () => { setOpen(false); trigger.current?.focus(); };
     useLayoutEffect(() => {
         if (!open) return;
+        const position = () => {
+            const rect = trigger.current?.getBoundingClientRect(), menu = items.current;
+            if (!rect || !menu) return;
+            const below = innerHeight - rect.bottom - 8, above = rect.top - 8;
+            const upwards = below < menu.scrollHeight && above > below;
+            menu.style.top = upwards ? 'auto' : '100%';
+            menu.style.bottom = upwards ? '100%' : 'auto';
+            menu.style.maxHeight = `${Math.max(44, upwards ? above : below)}px`;
+        };
+        position();
         const buttons = items.current?.querySelectorAll<HTMLElement>('[role=menuitem]:not([disabled])');
         buttons?.[last.current ? buttons.length - 1 : 0]?.focus();
         const outside = (event: Event) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
@@ -21,16 +31,18 @@ export function ActionMenu({ label, children }: { label: string; children: (clos
             const active = document.activeElement;
             // Some engines blur a display:none descendant before resize runs.
             const hadFocus = root.current?.contains(active) || active === document.body;
-            if (trigger.current?.getClientRects().length) return;
+            if (trigger.current?.getClientRects().length) { position(); return; }
             setOpen(false);
             // The trigger is now hidden. Preserve a keyboard user's place in the
             // library instead of leaving focus on body when the item is removed.
             if (hadFocus) root.current?.closest<HTMLElement>('[tabindex]')?.focus({ preventScroll: true });
         };
         window.addEventListener('resize', resize);
+        window.addEventListener('scroll', position, true);
         return () => {
             document.removeEventListener('pointerdown', outside); document.removeEventListener('focusin', outside);
             window.removeEventListener('resize', resize);
+            window.removeEventListener('scroll', position, true);
         };
     }, [open]);
     return <div ref={root} className="action-menu" onKeyDown={event => {

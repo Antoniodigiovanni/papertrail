@@ -123,6 +123,31 @@
 .paper-menu{position:absolute;top:100%;right:0;z-index:30;width:190px;max-width:calc(100vw - 32px);padding:5px;background:#fafbf7;border:1px solid #becab6;border-radius:7px;box-shadow:0 5px 18px #20311f25}
 .paper-menu>button{display:block;min-height:44px;width:100%;border:0;text-align:left;font-size:14px;background:transparent;margin:0}
 .paper-menu>button:hover,.paper-menu>button:focus-visible{background:#e7eddf}
+.paper-menu{overflow-y:auto;overscroll-behavior:contain}
+/* A bounded summary and one actions column share the first grid row. Expanded
+   controls span both columns; saved feedback never creates a second row. */
+@media(min-width:761px){
+  .paper-row{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:start;gap:0 12px;min-height:0;padding:20px 4px}
+  .paper-row-summary{grid-column:1;grid-row:1;align-items:flex-start}
+  .paper-selection{min-height:44px}
+  .paper-open{align-items:flex-start}
+  .paper-info{flex:1}
+  .paper-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .paper-authors{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .paper-meta{line-height:1.5;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .paper-filename{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .paper-open:has(.paper-filename) .paper-file-status,.paper-meta-empty{display:none}
+  .row-tags{padding:0;min-width:0}
+  .project-label,.tag-label{max-width:100%;overflow-wrap:anywhere}
+  .desktop-state{flex-shrink:0;margin-top:8px}
+  .row-arrow{display:none}
+  .library-paper-controls{display:contents}
+  .paper-actions-menu{grid-column:2;grid-row:1;margin:0}
+  .library-paper-controls>span[role=status]{grid-column:1 / -1;padding-top:8px}
+  .library-paper-controls>span[data-save-state=Saved]{display:none}
+  .library-paper-controls>.alert,.library-paper-controls>section{grid-column:1 / -1;margin:12px 0 0;min-width:0}
+  .library-paper-controls>section{border:1px solid var(--line);border-radius:6px;padding:12px;background:#f4f6ef}
+}
 @media(max-width:760px){
   .library-main{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
   .topbar{height:52px;padding:0 12px;font-size:13px}

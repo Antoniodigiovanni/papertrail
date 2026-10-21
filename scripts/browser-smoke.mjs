@@ -2,6 +2,7 @@ import { chromium, webkit } from 'playwright';
 import { pdfStreamCompatibilityChecks } from './pdfjs-browser-checks.mjs';
 import { libraryManagementChecks } from './library-browser-checks.mjs';
 import { importLibraryChecks } from './import-browser-checks.mjs';
+import { desktopLibraryChecks } from './desktop-library-checks.mjs';
 import { paperRenameChecks } from './paper-rename-checks.mjs';
 import { mobileLibraryChecks } from './mobile-library-checks.mjs';
 import assert from 'node:assert/strict';
@@ -36,6 +37,7 @@ try{
       await libraryManagementChecks(browser,base);
     }
     await paperRenameChecks(browser,base);
+    await desktopLibraryChecks(browser,base);
     await mobileLibraryChecks(browser,base);
   }
   if (!process.env.PAPERTRAIL_LIBRARY_ONLY && !process.env.PAPERTRAIL_RESPONSIVE_ONLY) {

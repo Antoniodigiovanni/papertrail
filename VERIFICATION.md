@@ -609,3 +609,46 @@ The checkout's `.git` rejects index.lock as read-only. Delivery uses two new com
 in an isolated writable Git directory and a bundle with explicit branch refs;
 the three imported commits are unchanged. Working files match the feature tip.
 No production data, configuration, restart, deployment or push was performed.
+
+## Paper title rename and desktop row regression (2026-10-21)
+
+Starting from deployed baseline `17efcf6`, the supplied 1482px screenshot and code
+identify two causes: the explicit Rename PDF action lived in a hidden mobile-only
+menu, and a desktop wrapper broke the archive-help hiding selector. The resulting
+desktop action block, hint and Saved status increased row height below the summary.
+
+The first separate commit adds an independent Rename paper dialog and exposes one
+shared Actions menu on desktop/mobile, retaining Rename PDF, organizer, reversible
+archive and confirmed deletion. Title saves use existing revisions/queue, preserve
+unconfirmed drafts on failure and require explicit reload after failure/conflict.
+The second commit makes desktop summaries/actions share a bounded grid row, spans
+expanded controls across it, and bounds long titles/authors/venue/filenames. Mobile
+and reader behavior remain covered by the existing suites.
+
+New browser checks cover desktop/mobile title persistence and reader consistency,
+independent filenames, byte-identical downloads, held saves, failure rollback,
+actual competing revisions/reload and focus. Desktop checks assert real row heights,
+column bounds/alignment, non-overlap, text line bounds, menu hit testing and expanded
+organizer width at 1482px and other desktop/zoom-equivalent CSS widths/fractional DPR.
+They do not substitute viewport width or screenshots for row geometry assertions.
+See `docs/PAPER-RENAME.md` and `docs/DESKTOP-LIBRARY-LAYOUT.md` for commands and limits.
+
+`npm run verify` passes types, lint, all 72 tests and build, including an API/store
+title regression that verifies stale/invalid saves, unchanged files/related data
+and persistence after reopening SQLite. Both `npm run test:browser:responsive`
+and `npm run test:browser` were attempted: the server cannot bind 127.0.0.1:3491
+(EPERM) and Chromium fails sandbox startup before any browser UI assertion runs.
+No new geometry execution or screenshots, physical Windows Chrome/Edge, native
+browser zoom, or physical mobile result is claimed. Host browser validation remains
+outstanding; source and API evidence do not establish a browser pass.
+
+Separately, `node scripts/inspect-empty-pdf-metadata.mjs` reproduces Title `Subject:`
+and Author `Creator: LaTeX with hyperref` from an in-memory PDF with empty metadata.
+The newline-crossing parser expressions explain this result. This work changes no
+metadata extraction or existing stored metadata; the extraction defect remains
+open. No original user PDF or production record was inspected or rewritten.
+
+The protected checkout Git directory remains unchanged. Delivery uses explicit
+feature/layout branch refs in a verified bundle created from a writable isolated
+Git directory. Working files match the layout branch tip. No production data,
+configuration, restart, deployment or push was performed.
