@@ -4,7 +4,7 @@ A private, self-hosted paper library and browser PDF reader. One shared library,
 with Cloudflare Access authentication and no application accounts. Online-first:
 reading, annotations and synchronization require a connection to your server.
 
-**Verification status:** `npm run verify` passes type/lint checks, all **43 tests**,
+**Verification status:** `npm run verify` passes type/lint checks, all **47 tests**,
 and the production build. Project rename and library-management changes add API/persistence
 regressions and real browser acceptance flows. Browser execution was attempted;
 loopback HTTP binding fails with `EPERM` and Chromium exits with a sandbox
@@ -126,6 +126,15 @@ permissive CORS policy. `PUBLIC_ORIGIN` also checks browser mutation origins.
   choose a paper with a PDF to open the existing reader.
 - Library search covers bibliographic fields, projects, tags, general notes,
   highlighted passages and comments. Project, tag and reading-state filters combine.
+- **Organize paper** on a library row and **Details** in the reader include a
+  separate **PDF filename** editor and download link. Save a name ending in `.pdf`;
+  it appears on the library row and is used for inline viewing and downloads.
+  Editing it never changes the bibliographic title, original bytes, checksum,
+  storage path, paper links or annotation anchors. Title remains editable in Details.
+  Names are trimmed, limited to 240 UTF-8 bytes, and reject paths, traversal,
+  control/format characters, reserved punctuation and device names. Unicode names
+  use an encoded `filename*` header with a stable ASCII fallback. Safe upload names
+  become the initial filename; other imports and legacy rows use `paper-<id>.pdf`.
 - Open a PDF, select text **within one PDF page**, choose a color, add an optional
   comment, and save the highlight. Tap a highlight or select its list entry to jump
   and edit. Zoom, page navigation, selectable PDF.js text and within-paper search
@@ -206,6 +215,22 @@ PDFs as base64, SHA-256 hashes, all papers (including archived), metadata, stabl
 revisions, projects, tags, assignments, notes, highlight anchors/comments, and reading
 positions. Download over the authenticated UI and keep the file private. Backups are
 not encrypted; use encrypted storage for them.
+
+New backups use format version **2** and include PDF filenames. Restore accepts
+both version 1 (missing names receive `paper-<id>.pdf`) and version 2. Validation
+rejects unsafe filenames before writing files or records.
+
+The database migration adds one nullable `pdfFilename` column and advances
+`user_version` to 2. It does not rewrite existing paper records or files and is
+idempotent even after older code resets the version marker. To roll back the code,
+keep the column: the baseline reads/writes existing columns and keeps the saved
+names on disk, although it uses its old download names and UI. Reapplying this
+feature restores access to those names. No destructive downgrade is needed.
+Version 2 backups require this version or newer to restore; baseline restore
+rejects them. Retain pre-upgrade backups. A backup exported by baseline code from
+an upgraded database may also contain the added field and fail baseline's strict
+restore schema; use the newer restore code for that snapshot. Never remove the
+column or hand-edit the only backup to work around a version mismatch.
 
 To restore, start a separate instance with **fresh isolated data storage**, then use
 **Restore backup** and confirm. Projects and tags must also be empty. Restore

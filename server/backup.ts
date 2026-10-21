@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { unlinkSync } from 'node:fs';
 import { Store } from './store.js';
-import { paperPatch, annotation, uuid, label, normalizeArxiv, normalizeDoi } from './schema.js';
+import { paperPatch, pdfFilename, annotation, uuid, label, normalizeArxiv, normalizeDoi } from './schema.js';
+import { defaultPdfFilename } from './filename.js';
 import { HttpError } from './errors.js';
 import { validatePdf } from './pdf.js';
 export const MAX_BACKUP = 128 * 1024 * 1024;
@@ -10,17 +11,21 @@ const sha = z.string().regex(/^[a-f0-9]{64}$/);
 const record = paperPatch.required({ title: true, authors: true, year: true, venue: true, abstract: true, url: true, note: true, status: true, archived: true, position: true, projectIds: true, tagIds: true }).extend({
     id: uuid, doi: z.string().max(300).nullable(), arxiv: z.string().max(100).nullable(), arxivBase: z.string().max(100).nullable(),
     pdfSha: sha.nullable(), pageCount: z.number().int().min(1).max(10000).nullable(), created: z.string().datetime(), updated: z.string().datetime(),
+    pdfFilename: pdfFilename.nullish(),
 }).strict();
 const backupSchema = z.object({
-    format: z.literal('papertrail'), version: z.literal(1), createdAt: z.string().datetime(),
+    format: z.literal('papertrail'), version: z.union([z.literal(1), z.literal(2)]), createdAt: z.string().datetime(),
     projects: z.array(z.object({ id: uuid, name: label }).strict()).max(10000), tags: z.array(z.object({ id: uuid, name: label }).strict()).max(10000),
     papers: z.array(record).max(10000), annotations: z.array(annotation.extend({ id: uuid, paperId: uuid, revision: z.number().int().nonnegative(), created: z.string().datetime() }).strict()).max(100000),
     files: z.array(z.object({ sha, base64: z.string().max(56 * 1024 * 1024) }).strict()).max(10000),
-}).strict();
+}).strict().superRefine((data, context) => {
+    if (data.version === 2 && data.papers.some(paper => paper.pdfFilename == null))
+        context.addIssue({ code: 'custom', message: 'Version 2 backups require PDF filenames.' });
+});
 export function backup(store: Store) {
     return store.db.transaction(() => {
         const papers = store.list();
-        return { format: 'papertrail' as const, version: 1 as const, createdAt: new Date().toISOString(), projects: store.labels('projects'), tags: store.labels('tags'), papers,
+        return { format: 'papertrail' as const, version: 2 as const, createdAt: new Date().toISOString(), projects: store.labels('projects'), tags: store.labels('tags'), papers,
             annotations: papers.flatMap(p => store.annotations(p.id)), files: [...new Set(papers.map(p => p.pdfSha).filter((s): s is string => !!s))].map(sha => ({ sha, base64: store.pdfBytes(sha).toString('base64') })) };
     })();
 }
@@ -83,7 +88,7 @@ export async function restore(store: Store, input: unknown) {
             }
             for (const p of data.papers) {
                 const { projectIds, tagIds, ...fields } = p;
-                const entries = Object.entries(fields).map(([k, v]) => [k, k === 'authors' || k === 'position' ? JSON.stringify(v) : k === 'archived' ? Number(v) : v]);
+                const entries = Object.entries({ ...fields, pdfFilename: p.pdfFilename ?? defaultPdfFilename(p.id) }).map(([k, v]) => [k, k === 'authors' || k === 'position' ? JSON.stringify(v) : k === 'archived' ? Number(v) : v]);
                 store.db.prepare(`INSERT INTO papers (${entries.map(([k]) => k).join(',')}) VALUES (${entries.map(() => '?').join(',')})`).run(...entries.map(([, v]) => v));
                 store.setLinks(p.id, 'projects', projectIds);
                 store.setLinks(p.id, 'tags', tagIds);

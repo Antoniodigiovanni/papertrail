@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
 
 const waitSaved = page => page.waitForFunction(() => [...document.querySelectorAll('.library-paper-controls [role=status], .save-state')].every(el => el.textContent.includes('Saved')));
@@ -52,6 +53,32 @@ export async function libraryManagementChecks(browser, base) {
     await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
     await addTag(first, 'library-reflection');
     const firstUrl = `${base}/api/papers/${firstId}`;
+    // Filename edits are independent of title, storage identity and annotation anchors.
+    const filenameBefore = await detail(firstId);
+    const filenameBytes = await (await context.request.get(`${firstUrl}/pdf`)).body();
+    await first.getByLabel('PDF filename', { exact: true }).fill('../unsafe.pdf');
+    await first.getByRole('button', { name: 'Save PDF filename', exact: true }).click();
+    await first.getByRole('alert').filter({ hasText: 'without paths' }).waitFor();
+    assert.deepEqual(await detail(firstId), filenameBefore);
+    const editedFilename = "Étude d'algèbre (2026).pdf";
+    await first.getByLabel('PDF filename', { exact: true }).fill(editedFilename);
+    await first.getByRole('button', { name: 'Save PDF filename', exact: true }).click();
+    await first.locator('.paper-filename').filter({ hasText: editedFilename }).waitFor(); await waitSaved(page);
+    const filenameAfter = await detail(firstId);
+    assert.deepEqual(filenameAfter, { ...filenameBefore, pdfFilename: editedFilename, revision: filenameBefore.revision + 1, updated: filenameAfter.updated });
+    const downloadEvent = page.waitForEvent('download');
+    await first.getByRole('link', { name: 'Download PDF', exact: true }).click();
+    const download = await downloadEvent;
+    assert.equal(download.suggestedFilename(), editedFilename);
+    assert.deepEqual(await readFile(await download.path()), filenameBytes);
+    await page.reload(); await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    assert.equal(await first.getByLabel('PDF filename', { exact: true }).inputValue(), editedFilename);
+    await first.locator('.paper-open').click();
+    await page.getByRole('button', { name: 'Details', exact: true }).click();
+    assert.equal(await page.getByLabel('PDF filename', { exact: true }).inputValue(), editedFilename);
+    assert.equal(await page.getByLabel('Title', { exact: true }).inputValue(), filenameBefore.title);
+    await page.getByRole('button', { name: 'Back to library', exact: true }).click();
+    await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
     // Hold a saved response and queue several independent memberships and chip edits.
     let release;
     const gate = new Promise(resolve => { release = resolve; });

@@ -103,3 +103,8 @@
   .paper-file-icon svg{width:20px;height:20px}
   .topbar-left>.mobile-menu{flex-shrink:0}
 }
+
+.paper-filename{display:block;font-size:11px;line-height:1.5;color:#64765a;margin-top:5px;overflow-wrap:anywhere}
+.pdf-filename-editor{max-width:100%;margin:18px 0}
+.pdf-filename-editor input{font-size:16px}
+.pdf-filename-editor a{display:inline-block;font-size:12px;margin:12px}

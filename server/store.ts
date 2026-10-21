@@ -3,7 +3,8 @@ import { randomUUID, createHash } from 'node:crypto';
 import { mkdirSync, existsSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { HttpError } from './errors.js';
-import { label, normalizeDoi, normalizeArxiv, type PaperPatch, type AnnotationInput } from './schema.js';
+import { label, normalizeDoi, normalizeArxiv, pdfFilename, type PaperPatch, type AnnotationInput } from './schema.js';
+import { defaultPdfFilename } from './filename.js';
 export type Paper = {
     id: string;
     title: string;
@@ -16,6 +17,7 @@ export type Paper = {
     abstract: string;
     url: string;
     pdfSha: string | null;
+    pdfFilename: string;
     pageCount: number | null;
     status: 'Inbox' | 'Reading' | 'Finished';
     archived: boolean;
@@ -62,8 +64,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS paper_tags (paperId TEXT REFERENCES papers(id) ON DELETE CASCADE, tagId TEXT REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY(paperId,tagId));
       CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, paperId TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE, page INTEGER NOT NULL,
         quote TEXT NOT NULL, rects TEXT NOT NULL, color TEXT NOT NULL, comment TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, created TEXT NOT NULL);
-      PRAGMA user_version = 1;
     `);
+        // Additive and idempotent: legacy rows and all PDF/annotation data stay intact.
+        this.db.transaction(() => {
+            const columns = this.db.prepare('PRAGMA table_info(papers)').all() as { name: string }[];
+            if (!columns.some(column => column.name === 'pdfFilename'))
+                this.db.exec('ALTER TABLE papers ADD COLUMN pdfFilename TEXT');
+            const version = this.db.prepare('PRAGMA user_version').get() as { user_version: number };
+            if (version.user_version < 2) this.db.pragma('user_version = 2');
+        })();
     }
     close() { this.db.close(); }
     labels(kind: 'projects' | 'tags') { return this.db.prepare(`SELECT * FROM ${kind} ORDER BY name COLLATE NOCASE`).all() as {
@@ -104,7 +113,7 @@ export class Store {
         const row = this.db.prepare('SELECT * FROM papers WHERE id=?').get(id) as Record<string, unknown> | undefined;
         if (!row)
             throw new HttpError(404, 'Paper not found.');
-        return { ...row, authors: JSON.parse(row.authors as string), position: JSON.parse(row.position as string), archived: !!row.archived,
+        return { ...row, pdfFilename: row.pdfFilename ?? defaultPdfFilename(id), authors: JSON.parse(row.authors as string), position: JSON.parse(row.position as string), archived: !!row.archived,
             projectIds: (this.db.prepare('SELECT projectId AS id FROM paper_projects WHERE paperId=?').all(id) as {
                 id: string;
             }[]).map(x => x.id),
@@ -161,8 +170,10 @@ export class Store {
     insert(meta: Metadata, projectIds: string[], pdf?: {
         bytes: Buffer;
         pages: number;
+        filename?: string;
     }) {
         return this.db.transaction(() => {
+            const filename = pdf?.filename === undefined ? undefined : pdfFilename.parse(pdf.filename);
             for (const projectId of projectIds)
                 if (!this.db.prepare('SELECT id FROM projects WHERE id=?').get(projectId))
                     throw new HttpError(400, 'Unknown project assignment.');
@@ -177,6 +188,7 @@ export class Store {
             this.db.prepare(`INSERT INTO papers (id,title,authors,doi,arxiv,arxivBase,year,venue,abstract,url,pdfSha,pageCount,status,archived,note,position,revision,created,updated)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, meta.title || 'Untitled paper', JSON.stringify(meta.authors || []), meta.doi || null, meta.arxiv || null, meta.arxiv?.replace(/v\d+$/, '') || null, meta.year || '', meta.venue || '', meta.abstract || '', meta.url || '', sha || null, pdf?.pages || null, 'Inbox', 0, '', JSON.stringify({ page: 1, offset: 0 }), 0, now, now);
             this.setLinks(id, 'projects', projectIds);
+            if (filename) this.db.prepare('UPDATE papers SET pdfFilename=? WHERE id=?').run(filename, id);
             return { paper: this.get(id), duplicate: false };
         })();
     }
@@ -186,6 +198,7 @@ export class Store {
             if (paper.revision !== patch.revision)
                 throw new HttpError(409, 'This paper changed on another device. Reload the latest version before saving again.', { current: paper });
             const { revision: _revision, projectIds, tagIds, ...fields } = patch;
+            if (fields.pdfFilename !== undefined) fields.pdfFilename = pdfFilename.parse(fields.pdfFilename);
             if (fields.doi)
                 fields.doi = normalizeDoi(fields.doi);
             const extra: Record<string, unknown> = {};

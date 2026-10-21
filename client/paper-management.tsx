@@ -1,11 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, patch, type Label, type Library, type PaperDetail, type SavePaper } from './api';
 import { AssignmentCheckbox } from './assignment-checkbox';
+import { normalizePdfFilename, pdfFilenameProblem } from '../server/filename';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 export const deletePaper = (paper: PaperDetail) => api(`/api/papers/${paper.id}`, {
     method: 'DELETE', body: JSON.stringify({ confirmation: paper.id, revision: paper.revision }),
 });
+
+export function PdfFilenameEditor({ paper, onSave, disabled = false }: {
+    paper: PaperDetail; onSave: SavePaper; disabled?: boolean;
+}) {
+    const [name, setName] = useState(paper.pdfFilename);
+    const [error, setError] = useState('');
+    const [busy, setBusy] = useState(false);
+    useEffect(() => { setName(paper.pdfFilename); setError(''); }, [paper.pdfFilename]);
+    if (!paper.pdfSha) return null;
+    return <form className="pdf-filename-editor" onSubmit={event => {
+        event.preventDefault();
+        const invalid = pdfFilenameProblem(name);
+        if (invalid) { setError(invalid); return; }
+        setBusy(true); setError('');
+        void onSave({ pdfFilename: normalizePdfFilename(name) }).catch(error => setError(message(error))).finally(() => setBusy(false));
+    }}>
+        <label>PDF filename<input aria-label="PDF filename" value={name} disabled={disabled || busy} onChange={event => { setName(event.target.value); setError(''); }}/></label>
+        <p className="hint">Download name ending in .pdf. Paper title is edited separately.</p>
+        <button type="submit" disabled={disabled || busy || name === paper.pdfFilename}>{busy ? 'Saving filename…' : 'Save PDF filename'}</button>
+        <a href={`/api/papers/${paper.id}/pdf?download=1`}>Download PDF</a>
+        {error && <p className="alert" role="alert">{error}</p>}
+    </form>;
+}
 
 export function PaperActions({ paper, onSave, onDelete, onError, disabled = false }: {
     paper: PaperDetail; onSave: SavePaper; onDelete: () => Promise<void>;
@@ -136,6 +160,6 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
         }}/>
         <span role="status">{state}</span>
         {error && <div className="alert" role="alert">{error}<button onClick={() => void reload()}>Reload latest</button></div>}
-        {expanded && <section id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
+        {expanded && <section id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><PdfFilenameEditor paper={paper} onSave={save} disabled={failed.current}/><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
     </div>;
 }

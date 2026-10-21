@@ -505,3 +505,29 @@ could not reach UI assertions: local listen on 127.0.0.1:3491 returned `EPERM`,
 and Chromium exited with `sandbox_host_linux.cc` / Operation not permitted.
 The reported host failure was not reproduced or confirmed fixed in this sandbox;
 the updated browser regression must be rerun on a capable host. No schema changes.
+
+## Independent PDF filename editing (2026-10-21)
+
+Library Organize and reader Details now edit `pdfFilename` separately from title.
+Safe local upload names initialize it; legacy/provider defaults use the stable
+paper ID. Both inline and attachment responses send an ASCII fallback plus an
+encoded Unicode `filename*`. Names require `.pdf` and reject paths, traversal,
+controls, format characters, reserved punctuation/device names and oversized UTF-8.
+API and store validation run before metadata changes. The response boundary also
+falls back safely if stored filename metadata is malformed.
+
+The additive, idempotent migration adds a nullable column and schema version 2;
+legacy rows are not rewritten. Backup version 2 includes names; restore accepts
+version 1 with missing/null names and validates names before any writes. README
+records code rollback and backup-version caveats. Keep the added column on rollback.
+
+Regressions compare bytes, checksum/path, IDs, annotations, notes, assignments and
+position through filename edits; test independent title edits, stale revisions,
+duplicate reuse, reopening, legacy migration/version markers and both backup
+formats. Browser coverage adds invalid-name recovery, persisted display/editor
+values in library and reader, and a real Unicode-named download with byte comparison.
+
+Validation: `npm run verify` passes typecheck, lint, 47 tests and build.
+Browser execution remains blocked before UI assertions by loopback `EPERM` and
+Chromium's sandbox permission error; no host browser pass is claimed. Rerun
+`npm run test:browser` on a capable host. Production was not accessed or changed.

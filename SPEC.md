@@ -1,7 +1,7 @@
 # Papertrail — v1 specification
 
 ## Product
-A self-hosted personal paper archive and browser PDF reader, usable on iOS/iPadOS Safari, Android Chrome, and laptop Chrome/Firefox. One shared personal library, no app accounts; Cloudflare Access provides authentication. No existing library to migrate.
+A self-hosted personal paper archive and browser PDF reader, usable on iOS/iPadOS Safari, Android Chrome, and laptop Chrome/Firefox. One shared personal library, no app accounts; Cloudflare Access provides authentication. Preserve existing libraries through additive migrations and backwards-compatible restore.
 
 ## Agreed scope
 - Projects and library-wide tags. A paper belongs to multiple projects without duplicated files. All papers and Unassigned views; combine project and tag filters.
@@ -15,6 +15,7 @@ A self-hosted personal paper archive and browser PDF reader, usable on iOS/iPadO
 - Browser PDF reader with zoom, navigation, search within an open text-based PDF, and text selection. Responsive sidebar on laptop and drawer/panel on touch devices.
 - Text highlights with colors and optional typed comments; no pen/freehand. Editable general note per paper, basic Markdown as an implementation default.
 - Annotations list navigates to the passage. Highlights anchor to PDF page coordinates and selected text, never viewport pixels. Preserve original PDF bytes.
+- Edit the user-visible/download PDF filename independently of bibliographic title in library Organize and reader Details. Require a safe `.pdf` name, reject traversal/control characters, and encode Content-Disposition safely with Unicode support. Persist names through reopen and backup/restore. Preserve original bytes, SHA-256, content-addressed storage path, stable IDs/links, annotations, notes, position and assignments. Add a nullable column without rewriting legacy records; default legacy names to `paper-<id>.pdf`. Export backup version 2, accept version 1 with defaults, and document code/backup rollback compatibility.
 - Automatically save reading position (page and relative within-page position), annotations, and notes; show saving/saved/error states. Restore on another device. Prevent delayed/stale writes from silently overwriting newer state; define conflict behavior.
 - Search title, authors, metadata, tags, general notes, and highlight notes. No whole-library PDF-text index required.
 - Reading states Inbox, Reading, Finished; independent of project membership.

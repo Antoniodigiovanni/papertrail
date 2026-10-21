@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { normalizePdfFilename, pdfFilenameProblem } from './filename.js';
+export const pdfFilename = z.string().superRefine((value, context) => {
+    const message = pdfFilenameProblem(value);
+    if (message) context.addIssue({ code: 'custom', message });
+}).transform(normalizePdfFilename);
 export const uuid = z.string().uuid();
 export const label = z.string().trim().min(1).max(100);
 export const ids = z.array(uuid).max(100);
@@ -6,6 +11,7 @@ export const position = z.object({ page: z.number().int().min(1).max(100000), of
 export const paperPatch = z.object({
     revision: z.number().int().nonnegative(),
     title: z.string().trim().min(1).max(2000).optional(),
+    pdfFilename: pdfFilename.optional(),
     authors: z.array(z.string().trim().min(1).max(300)).max(200).optional(),
     doi: z.string().max(300).nullable().optional(),
     arxiv: z.string().max(100).nullable().optional(),

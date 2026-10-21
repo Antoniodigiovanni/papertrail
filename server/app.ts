@@ -6,7 +6,8 @@ import { z, ZodError } from 'zod';
 import { Store } from './store.js';
 import { authBoundary, type AuthConfig } from './auth.js';
 import { HttpError } from './errors.js';
-import { annotation, annotationPatch, ids, label, normalizeArxiv, normalizeDoi, paperPatch, uuid } from './schema.js';
+import { annotation, annotationPatch, ids, label, normalizeArxiv, normalizeDoi, paperPatch, pdfFilename, uuid } from './schema.js';
+import { pdfContentDisposition } from './filename.js';
 import { importReference, type FetchProvider } from './providers.js';
 import { MAX_PDF, validatePdf } from './pdf.js';
 import { bibtex, markdownExport, markdownHtml } from './exports.js';
@@ -144,12 +145,15 @@ export function createApp(options: AppOptions) {
         const bytes = await body(c, MAX_PDF);
         const parsed = await validatePdf(bytes);
         const filename = (c.req.header('X-Filename') || '').slice(0, 2000);
+        let displayFilename: string | undefined;
         let title = 'Untitled paper';
         try {
+            const safe = pdfFilename.safeParse(decodeURIComponent(filename));
+            if (safe.success) displayFilename = safe.data;
             title = decodeURIComponent(filename).replace(/.*[\\/]/, '').replace(/\.pdf$/i, '').trim() || title;
         }
         catch { }
-        const result = store.insert({ title: parsed.title || title, authors: parsed.authors }, projectIds, { bytes, pages: parsed.pages });
+        const result = store.insert({ title: parsed.title || title, authors: parsed.authors }, projectIds, { bytes, pages: parsed.pages, filename: displayFilename });
         return c.json({ ...result, paper: detail(result.paper.id) }, result.duplicate ? 200 : 201);
     });
     app.post('/api/import', async (c) => {
@@ -197,7 +201,7 @@ export function createApp(options: AppOptions) {
         if (!p.pdfSha)
             throw new HttpError(404, 'No PDF attached.');
         c.header('Content-Type', 'application/pdf');
-        c.header('Content-Disposition', `${c.req.query('download') ? 'attachment' : 'inline'}; filename="paper-${p.id}.pdf"`);
+        c.header('Content-Disposition', pdfContentDisposition(p.pdfFilename, p.id, !!c.req.query('download')));
         c.header('ETag', `"${p.pdfSha}"`);
         return c.body(new Uint8Array(store.pdfBytes(p.pdfSha)));
     });

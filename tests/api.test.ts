@@ -116,6 +116,116 @@ test('valid text PDF parses with actual pdfinfo; binary is preserved and dedupli
     assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), bytes);
     assert.equal(downloaded.headers.get('content-type'), 'application/pdf');
     assert.match(downloaded.headers.get('content-disposition')!, /paper-[a-f0-9-]+\.pdf/);
+    assert.match(downloaded.headers.get('content-disposition')!, /filename\*=UTF-8''paper\.pdf$/);
+});
+test('PDF filename editing is independent, revision-aware and preserves bytes, identity and annotations', async () => {
+    const p = await paper();
+    const project = await addLabel('projects', 'Filename project');
+    const tag = await addLabel('tags', 'Filename tag');
+    store.patch(p.id, { revision: p.revision, projectIds: [project.id], tagIds: [tag.id], note: 'Keep notes', status: 'Reading', position: { page: 2, offset: .4 } });
+    store.addAnnotation(p.id, { page: 1, quote: 'Keep passage', rects: [[.1, .1, .4, .2]], color: 'blue', comment: 'Keep anchor' });
+    const before = store.get(p.id), annotations = store.annotations(p.id);
+    const filePath = store.pdfPath(p.pdfSha!), fileBytes = readFileSync(filePath);
+    const route = `/api/papers/${p.id}`;
+    const response = await request(route, 'PATCH', { revision: before.revision, pdfFilename: "  Étude d'algèbre (2026).PDF  " });
+    assert.equal(response.status, 200, await response.clone().text());
+    const renamed = await response.json();
+    assert.equal(renamed.pdfFilename, "Étude d'algèbre (2026).pdf");
+    assert.deepEqual(store.get(p.id), { ...before, pdfFilename: renamed.pdfFilename, revision: before.revision + 1, updated: renamed.updated });
+    assert.deepEqual(store.annotations(p.id), annotations);
+    assert.deepEqual(readFileSync(filePath), fileBytes);
+    assert.deepEqual(readdirSync(store.files), [`${p.pdfSha}.pdf`]);
+    for (const download of ['', '?download=1']) {
+        const pdf = await request(`${route}/pdf${download}`);
+        const disposition = pdf.headers.get('content-disposition')!;
+        assert.ok(disposition.startsWith(download ? 'attachment;' : 'inline;'));
+        assert.ok(disposition.includes(`filename="paper-${p.id}.pdf";`));
+        assert.equal(decodeURIComponent(disposition.split("filename*=UTF-8''")[1]), renamed.pdfFilename);
+        assert.doesNotMatch(disposition, /[\r\n]|[éè]/u);
+        assert.ok(disposition.includes('%27'));
+        assert.equal(pdf.headers.get('etag'), `"${p.pdfSha}"`);
+        assert.deepEqual(Buffer.from(await pdf.arrayBuffer()), fileBytes);
+    }
+    assert.equal((await request(route, 'PATCH', { revision: before.revision, pdfFilename: 'stale.pdf' })).status, 409);
+    assert.equal((await request(route, 'PATCH', { revision: renamed.revision, title: 'Independent title' })).status, 200);
+    assert.equal(store.get(p.id).pdfFilename, renamed.pdfFilename);
+    const duplicate = await upload();
+    assert.equal((await duplicate.json()).paper.pdfFilename, renamed.pdfFilename);
+    store.close(); store = new Store(directory);
+    assert.equal(store.get(p.id).pdfFilename, renamed.pdfFilename);
+    assert.equal(store.get(p.id).title, 'Independent title');
+    assert.deepEqual(store.annotations(p.id), annotations);
+    assert.deepEqual(store.pdfBytes(p.pdfSha!), fileBytes);
+});
+test('unsafe PDF filenames are rejected atomically at API and store boundaries', async () => {
+    const p = await paper();
+    for (const pdfFilename of ['', ' ', 'no-extension', '.pdf', '.hidden.pdf', '../escape.pdf', 'a/b.pdf', 'a\\b.pdf', 'bad..pdf', 'bad".pdf', 'bad:.pdf', 'bad?.pdf', 'bad*.pdf', 'bad|.pdf', 'bad<.pdf', 'bad>.pdf', 'bad\r\n.pdf', 'bad.pdf\n', 'bad\0.pdf', 'bad\u007f.pdf', 'bad\u0085.pdf', 'bad\u202e.pdf', 'bad\ud800.pdf', 'CON.pdf', 'lpt1.extra.pdf', 'trailing .pdf', 'x'.repeat(237) + '.pdf', 'é'.repeat(119) + '.pdf']) {
+        const response = await request(`/api/papers/${p.id}`, 'PATCH', { revision: p.revision, title: 'Must not save', pdfFilename });
+        assert.equal(response.status, 400, JSON.stringify(pdfFilename));
+        assert.throws(() => store.patch(p.id, { revision: p.revision, pdfFilename }));
+        assert.deepEqual(store.get(p.id), pWithoutDetails(p));
+    }
+    const fallback = await app.request('http://localhost/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent('../unsafe.pdf') }, body: new Uint8Array(textPdf('Safe fallback')) });
+    const uploaded = (await fallback.json()).paper;
+    assert.equal(uploaded.pdfFilename, `paper-${uploaded.id}.pdf`);
+    // The response boundary must also be safe if stored metadata is malformed.
+    store.db.prepare('UPDATE papers SET pdfFilename=? WHERE id=?').run('bad.pdf\r\nInjected: value', p.id);
+    const disposition = (await request(`/api/papers/${p.id}/pdf?download=1`)).headers.get('content-disposition')!;
+    assert.equal(decodeURIComponent(disposition.split("filename*=UTF-8''")[1]), `paper-${p.id}.pdf`);
+    assert.doesNotMatch(disposition, /[\r\n]|Injected/);
+    assert.deepEqual(store.pdfBytes(p.pdfSha!), textPdf());
+});
+function pWithoutDetails({ annotations: _annotations, noteHtml: _noteHtml, ...paper }: PaperDetail) { return paper; }
+
+test('filename migration upgrades a legacy database additively and survives legacy version markers', async () => {
+    const p = await paper();
+    store.addAnnotation(p.id, { page: 1, quote: 'Original anchor', rects: [[.1, .1, .4, .2]], color: 'green', comment: 'Keep' });
+    const before = store.get(p.id), annotations = store.annotations(p.id);
+    // Reconstruct the baseline schema only in this disposable test database.
+    store.db.exec('ALTER TABLE papers DROP COLUMN pdfFilename; PRAGMA user_version = 1;');
+    store.close(); store = new Store(directory);
+    assert.deepEqual(store.get(p.id), { ...before, pdfFilename: `paper-${p.id}.pdf` });
+    assert.deepEqual(store.annotations(p.id), annotations);
+    assert.deepEqual(store.pdfBytes(p.pdfSha!), textPdf());
+    assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 2);
+    const renamed = store.patch(p.id, { revision: before.revision, pdfFilename: 'Migration retained.pdf' });
+    // The baseline constructor resets this marker; the column must not be re-added.
+    store.db.pragma('user_version = 1');
+    store.close(); store = new Store(directory);
+    assert.deepEqual(store.get(p.id), renamed);
+    assert.equal(store.db.prepare('PRAGMA user_version').get()?.user_version, 2);
+});
+test('version 2 backups retain filenames and version 1 backups restore with stable defaults', async () => {
+    const p = await paper();
+    store.patch(p.id, { revision: p.revision, pdfFilename: 'Backup étude.pdf' });
+    const source = backup(store);
+    assert.equal(source.version, 2);
+    for (const legacy of ['current', 'missing', 'null'] as const) {
+        const targetDirectory = mkdtempSync(path.join(temporaryRoot, 'filename-restore-'));
+        const target = new Store(targetDirectory);
+        try {
+            const input = JSON.parse(JSON.stringify(source));
+            if (legacy !== 'current') {
+                input.version = 1;
+                for (const paper of input.papers) {
+                    if (legacy === 'null') paper.pdfFilename = null;
+                    else delete paper.pdfFilename;
+                }
+            }
+            await restore(target, input);
+            assert.deepEqual(target.get(p.id), { ...store.get(p.id), pdfFilename: legacy === 'current' ? 'Backup étude.pdf' : `paper-${p.id}.pdf` });
+            assert.deepEqual(target.pdfBytes(p.pdfSha!), textPdf());
+        } finally { target.close(); rmSync(targetDirectory, { recursive: true, force: true }); }
+    }
+    const targetDirectory = mkdtempSync(path.join(temporaryRoot, 'invalid-filename-restore-'));
+    const target = new Store(targetDirectory);
+    try {
+        for (const invalid of ['../escape.pdf', undefined, null]) {
+            const input = JSON.parse(JSON.stringify(source)); input.papers[0].pdfFilename = invalid;
+            await assert.rejects(restore(target, input));
+            assert.equal(target.list().length, 0); assert.deepEqual(readdirSync(target.files), []);
+        }
+    } finally { target.close(); rmSync(targetDirectory, { recursive: true, force: true }); }
 });
 test('notes, reading state, assignments, annotations and geometry survive a reopened database', async () => {
     const p = await paper();
