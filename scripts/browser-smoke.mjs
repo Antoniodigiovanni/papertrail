@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { libraryManagementChecks } from './library-browser-checks.mjs';
+import { importLibraryChecks } from './import-browser-checks.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -25,6 +26,7 @@ try{
   if(!started)errors.push(`Live HTTP server could not start/reply:\n${serverOutput}`);
   try{browser=await chromium.launch({headless:true});}catch(e){errors.push(`Chromium could not launch:\n${e.message}`);}
   if(errors.length)throw new Error(errors.join('\n\n'));
+  await importLibraryChecks(browser,base);
   await libraryManagementChecks(browser,base);
   if (!process.env.PAPERTRAIL_LIBRARY_ONLY) {
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
@@ -40,6 +42,10 @@ try{
   await page.getByRole('dialog').getByLabel('Reading systems',{exact:true}).check();
   await page.getByRole('dialog').getByLabel('Connected ideas',{exact:true}).check();
   await page.getByRole('button',{name:'Add to library',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'detached'});
+  await page.locator('.paper-row.revealed').waitFor();
+  assert.equal(new URL(page.url()).hash,'','upload stays in the library until the paper is opened');
+  await page.locator('.paper-row.revealed .paper-open').click();
   const firstPage=page.locator('.pdf-page[data-page-number="1"]');await firstPage.locator('.textLayer span').first().waitFor();
   await page.getByLabel('General note',{exact:true}).fill('# A connection\n\nEvidence makes ideas stronger.');
   await page.getByRole('button',{name:'Save note',exact:true}).click();

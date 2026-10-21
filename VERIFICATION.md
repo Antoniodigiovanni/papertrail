@@ -531,3 +531,37 @@ Validation: `npm run verify` passes typecheck, lint, 47 tests and build.
 Browser execution remains blocked before UI assertions by loopback `EPERM` and
 Chromium's sandbox permission error; no host browser pass is claimed. Rerun
 `npm run test:browser` on a capable host. Production was not accessed or changed.
+
+## Stay in the library after imports (2026-10-21)
+
+Upload, arXiv and DOI success share one library reveal handler. It clears
+search/tag/status filters and bulk selection, chooses the current requested
+project or a deterministic selected project (sorted ID), and uses All papers
+when no destination was requested. Archive scope follows the returned record;
+reusing an archived paper never unarchives it. The row is marked, scrolled into
+view and focused once; Enter or title activation explicitly opens the reader.
+Success retains duplicate and metadata-only/provider notices. The confirmed
+returned paper is shown immediately even if a subsequent library refresh fails.
+Earlier filtered responses and errors cannot replace the new state. Import
+errors retain the dialog, source and selected destinations for retry.
+
+API/store regressions exercise new local, arXiv and DOI results with real SQLite
+and fixture providers, destination queries, deterministic multiple targets,
+duplicate identity/data preservation, metadata-only warnings, archived duplicates
+and failures without store changes. Browser regressions seed remote identities
+via a version 1 backup into the empty disposable server and exercise actual
+import duplicate routes without external provider calls. They check desktop and
+mobile visibility/focus, destinations and filters, late filtered responses,
+reference warnings, retained retry inputs and confirmed success during a list
+refresh outage. Existing library/reader checks now open papers explicitly.
+
+Validation: `npm run verify` passes typecheck, lint, all 50 tests and build.
+`npm run test:browser` cannot reach UI assertions in this sandbox: loopback
+listen returns `EPERM` and Chromium exits with the sandbox permission error.
+The focus fix and new browser assertions still require a capable host run;
+there is no claimed host browser pass or physical-device verification. The
+previous production import failure remains unresolved and production was untouched.
+
+The additional UX requirements from `NEXT-CHANGES.md` are implemented with
+regressions and specification updates; the untracked requirements note was removed.
+This feature adds no migration and is reversible independently of filename data.

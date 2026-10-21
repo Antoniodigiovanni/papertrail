@@ -6,6 +6,7 @@ import type { Annotation } from '../server/store';
 import { Reader } from './reader';
 import { LibraryPaperControls, PaperActions, PaperLabels, PdfFilenameEditor, deletePaper } from './paper-management';
 import { ProjectMenu, RenameProjectDialog, projectActionsId } from './project-management';
+import { importLibraryNotice, importLibraryView, type ImportResult } from './library-import';
 import './style.css';
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 function App() {
@@ -25,6 +26,8 @@ function App() {
     const [selected, setSelected] = useState<string[]>([]);
     const [dev, setDev] = useState(false);
     const [ready, setReady] = useState(false);
+    const [revealed, setRevealed] = useState('');
+    const pendingReveal = useRef<string | null>(null);
     const libraryRequest = useRef(0);
     const filters = useRef({ project, tag, scope, search, status });
     filters.current = { project, tag, scope, search, status };
@@ -41,10 +44,30 @@ function App() {
             setReady(true);
         }
         catch (e) {
-            setError(message(e));
+            if (request === libraryRequest.current) setError(message(e));
         }
     }, []);
     useEffect(() => { void refresh(); }, [refresh, project, tag, scope, search, status]);
+    useEffect(() => {
+        if (importOpen || pendingReveal.current !== revealed) return;
+        const row = document.getElementById(`paper-row-${revealed}`);
+        if (!row) return;
+        pendingReveal.current = null;
+        row.focus({ preventScroll: true });
+        row.scrollIntoView({ block: 'center' });
+    }, [library.papers, importOpen, revealed]);
+    const imported = (result: ImportResult, requestedProjects: string[]) => {
+        const view = importLibraryView(result.paper, requestedProjects, project);
+        // Invalidate older filter responses before revealing confirmed import data.
+        libraryRequest.current++;
+        filters.current = view;
+        setProject(view.project); setScope(view.scope); setSearch(''); setTag(''); setStatus('');
+        setSelected([]); setError(''); setMenu(false); setImportOpen(false);
+        setNotice(importLibraryNotice(result));
+        setLibrary(current => ({ ...current, papers: [result.paper], total: current.total + (!result.duplicate && !result.paper.archived ? 1 : 0) }));
+        setRevealed(result.paper.id); pendingReveal.current = result.paper.id;
+        void refresh();
+    };
     useEffect(() => { api<{
         authMode: string;
     }>('/api/config').then(c => setDev(c.authMode === 'development')).catch(() => { }); }, []);
@@ -133,7 +156,7 @@ function App() {
         {error && <div className="alert" role="alert">{error}<button onClick={() => { setError(''); void refresh(); }}>Retry</button></div>}{notice && <div className="notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice('')}>×</button></div>}
         <div className="filterbar"><label className="search-box"><span>⌕</span><input aria-label="Search library" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search papers, notes, and ideas…"/></label><select aria-label="Filter by tag" value={tag} onChange={e => setTag(e.target.value)}><option value="">All tags</option>{library.tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select><select aria-label="Filter by reading state" value={status} onChange={e => setStatus(e.target.value)}><option value="">All reading states</option>{['Inbox', 'Reading', 'Finished'].map(s => <option key={s}>{s}</option>)}</select></div>
         <div className="list-caption"><span>{library.papers.length} {library.papers.length === 1 ? 'paper' : 'papers'}{selected.length ? ` · ${selected.length} selected` : ''}</span><div className="export-actions"><span>Export {selected.length ? 'selection' : project && project !== 'unassigned' ? 'project' : 'library'}</span><a href={exportHref('bibtex')}>BibTeX ↗</a><a href={exportHref('markdown')}>Markdown ↗</a></div></div>
-        <div className="paper-list">{library.papers.map(p => <article className="paper-row" aria-label={`Paper: ${p.title}`} key={p.id}><div className="paper-row-summary">
+        <div className="paper-list">{library.papers.map(p => <article id={`paper-row-${p.id}`} data-paper-id={p.id} className={`paper-row${revealed === p.id ? ' revealed' : ''}`} tabIndex={-1} aria-current={revealed === p.id ? 'true' : undefined} aria-label={`Paper: ${p.title}`} key={p.id} onKeyDown={event => { if (event.key === 'Enter' && event.target === event.currentTarget) { event.preventDefault(); void open(p.id); } }}><div className="paper-row-summary">
           <input aria-label={`Select ${p.title}`} type="checkbox" checked={selected.includes(p.id)} onChange={e => setSelected(e.target.checked ? [...selected, p.id] : selected.filter(id => id !== p.id))}/>
           <button className="paper-open" onClick={() => void open(p.id)}><span className="paper-file-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M14 3H6v18h12V7l-4-4Z M14 3v5h4 M9 12h6 M9 16h6"/></svg></span><span className="paper-info"><span className="paper-title">{p.title}</span><span className="paper-file-status">{p.pdfSha ? 'PDF available' : 'Reference only'}</span>{p.pdfSha && <span className="paper-filename">{p.pdfFilename}</span>}<span className="paper-authors">{p.authors.join(', ') || 'Author not yet added'}{p.year ? ` · ${p.year}` : ''}</span><span className="paper-meta">{p.venue || p.arxiv || p.doi || (p.pdfSha ? 'Local PDF' : 'No PDF attached')}{p.arxiv ? ` · ${p.arxiv}` : ''}</span><span className="row-tags">{library.projects.filter(l => p.projectIds.includes(l.id)).map(l => <span key={l.id} className="project-label">{l.name}</span>)}{library.tags.filter(l => p.tagIds.includes(l.id)).map(l => <span key={l.id} className="tag-label"># {l.name}</span>)}</span></span></button><span className={`state-badge ${p.status.toLowerCase()}`}>{p.status}</span><span className="row-arrow">↗</span></div>
           <LibraryPaperControls initial={{ ...p, annotations: [], noteHtml: '' }} labels={library} onChanged={refresh} onDeleted={() => setSelected(current => current.filter(id => id !== p.id))}/>
@@ -143,14 +166,14 @@ function App() {
       </div>
     </main>
     {renaming && <RenameProjectDialog project={renaming} onClose={() => setRenaming(null)} onRenamed={renamedProject}/>}
-    {importOpen && <ImportDialog projects={library.projects} project={project} onClose={() => setImportOpen(false)} onImported={(p, warning) => { setNotice(warning || 'Paper added to your library.'); setImportOpen(false); void refresh(); void open(p.id); }}/>}
+    {importOpen && <ImportDialog projects={library.projects} project={project} onClose={() => setImportOpen(false)} onImported={imported}/>}
   </div>;
 }
 function ImportDialog({ projects, project, onClose, onImported }: {
     projects: Label[];
     project: string;
     onClose: () => void;
-    onImported: (p: PaperDetail, warning?: string) => void;
+    onImported: (result: ImportResult, requestedProjects: string[]) => void;
 }) {
     const [reference, setReference] = useState('');
     const [file, setFile] = useState<File | null>(null);
@@ -161,12 +184,8 @@ function ImportDialog({ projects, project, onClose, onImported }: {
         setBusy(true);
         setError('');
         try {
-            const result = await api<{
-                paper: PaperDetail;
-                duplicate: boolean;
-                warning?: string;
-            }>(file ? `/api/upload?projects=${projectIds.join(',')}` : '/api/import', file ? { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) }, body: file } : { method: 'POST', body: JSON.stringify({ reference, projectIds }) });
-            onImported(result.paper, result.warning || (result.duplicate ? 'Existing paper reused. Project assignments added; the original PDF and annotations are preserved.' : undefined));
+            const result = await api<ImportResult>(file ? `/api/upload?projects=${projectIds.join(',')}` : '/api/import', file ? { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-Filename': encodeURIComponent(file.name) }, body: file } : { method: 'POST', body: JSON.stringify({ reference, projectIds }) });
+            onImported(result, projectIds);
         }
         catch (e) {
             setError(message(e));

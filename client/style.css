@@ -108,3 +108,5 @@
 .pdf-filename-editor{max-width:100%;margin:18px 0}
 .pdf-filename-editor input{font-size:16px}
 .pdf-filename-editor a{display:inline-block;font-size:12px;margin:12px}
+.paper-row.revealed{background:#edf3e5;box-shadow:inset 3px 0 #627b51}
+.paper-row:focus{outline:2px solid #627b51;outline-offset:3px}

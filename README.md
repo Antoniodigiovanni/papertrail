@@ -4,7 +4,7 @@ A private, self-hosted paper library and browser PDF reader. One shared library,
 with Cloudflare Access authentication and no application accounts. Online-first:
 reading, annotations and synchronization require a connection to your server.
 
-**Verification status:** `npm run verify` passes type/lint checks, all **47 tests**,
+**Verification status:** `npm run verify` passes type/lint checks, all **50 tests**,
 and the production build. Project rename and library-management changes add API/persistence
 regressions and real browser acceptance flows. Browser execution was attempted;
 loopback HTTP binding fails with `EPERM` and Chromium exits with a sandbox
@@ -89,7 +89,16 @@ permissive CORS policy. `PUBLIC_ORIGIN` also checks browser mutation origins.
 ## Using the library
 
 - Add a local PDF, arXiv ID/URL, or DOI/doi.org URL. Select any number of projects
-  while importing. Use **Organize paper** on any library row or in the reader
+  while importing. Success keeps you in the library, marks and scrolls to the paper,
+  and focuses its row; press Enter or choose its title to open the reader.
+  The current project stays selected if it is a target; otherwise a stable target
+  is chosen by sorted project ID. With no target, show All papers. Search, tag and
+  reading-state filters and bulk selections are cleared so the result is visible.
+  Duplicates reveal the existing paper and add requested memberships without
+  duplicating data. Archived duplicates remain archived and appear in Archive.
+  Success notices retain provider warnings and clearly identify references without
+  PDFs. Errors keep the dialog, file/reference and project choices available to retry.
+  Use **Organize paper** on any library row or in the reader
   header to change project memberships afterward; check multiple projects or clear
   all to leave the paper Unassigned. These edits save automatically without
   reimporting or duplicating files. Details also edits metadata and reading state.
@@ -322,8 +331,14 @@ docker compose --env-file .env.example build
 `npm run verify` runs type/lint checks, tests and the production build. Tests run
 with Node test isolation disabled so individual cases and failures are visible in
 restricted process environments. `test:browser` rebuilds the API and UI before
-starting an isolated live instance. It first runs the library-management flows
-also available independently through `npm run test:browser:library`: project
+starting an isolated live instance. It first checks import destination/filter
+recovery, stale responses, visible focused rows, metadata-only warnings,
+duplicates/archive preservation and recoverable errors at desktop/mobile widths.
+Remote identities are seeded by restoring fixtures into the empty disposable
+server; browser imports reuse these identities without provider network calls.
+API tests separately exercise new arXiv/DOI imports with fixture provider adapters.
+It then runs the library-management flows, also included in
+`npm run test:browser:library`: project
 menu keyboard/focus/outside dismissal, rename cancellation, blank/long/duplicate
 validation, injected save failure, actual competing rename/reload recovery, selected
 project display and reload persistence, exact paper/PDF preservation, compact file

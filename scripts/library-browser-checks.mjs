@@ -28,10 +28,20 @@ export async function libraryManagementChecks(browser, base) {
   const importPdf = async (title, project) => {
     await page.getByRole('button', { name: 'Add paper', exact: false }).first().click();
     await page.getByLabel('Upload PDF', { exact: true }).setInputFiles({ name: 'library.pdf', mimeType: 'application/pdf', buffer: textPdf(title) });
+    for (const checkbox of await page.getByRole('dialog').getByRole('checkbox').all()) await checkbox.uncheck();
     if (project) await page.getByRole('dialog').getByLabel(project, { exact: true }).check();
     await page.getByRole('button', { name: 'Add to library', exact: true }).click();
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    const added = row(title); await added.waitFor();
+    const id = await added.getAttribute('data-paper-id');
+    await page.waitForFunction(id => document.activeElement?.id === `paper-row-${id}`, id);
+    assert.equal(new URL(page.url()).hash, '', 'import stays in the library');
+    await page.getByRole('heading', { name: project || 'Your library', exact: true }).waitFor();
+    // Existing assignment/reader checks intentionally continue from All papers.
+    await page.getByRole('button', { name: 'All papers', exact: false }).click();
+    await added.locator('.paper-open').click();
     await page.getByRole('button', { name: 'Back to library', exact: true }).waitFor();
-    return new URLSearchParams(new URL(page.url()).hash.slice(1)).get('paper');
+    return id;
   };
   try {
     await page.goto(base);
