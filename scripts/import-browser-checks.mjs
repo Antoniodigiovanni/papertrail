@@ -108,14 +108,20 @@ export async function importLibraryChecks(browser, base) {
     const revealRefresh = page.waitForRequest(request => request.url().includes('/api/library?') && new URL(request.url()).searchParams.get('scope') === 'active');
     await submit(); await revealRefresh;
     await dialog.waitFor({ state: 'detached' });
-    await page.addStyleTag({ content: '.paper-row { min-height: 500px !important; } .paper-list { overflow-anchor: none; }' });
+    // Keep the actual node: Playwright text matching excludes STYLE elements.
+    // There is no navigation between insertion and removal in this reveal flow.
+    const revealStyle = await page.addStyleTag({ content: '.paper-row { min-height: 500px !important; } .paper-list { overflow-anchor: none; }' });
+    assert.equal(await revealStyle.evaluate(el => el.isConnected), true);
     const refreshed = page.waitForResponse(response => response.url().includes('/api/library?') && new URL(response.url()).searchParams.get('scope') === 'active');
     releaseReveal(); await refreshed;
     await page.waitForFunction(() => document.querySelectorAll('.paper-row').length === 3);
     const referenceRow = await assertReveal(doi.id, 'Your library');
     await page.unroute('**/api/library?*', holdReveal);
     assert.equal(await referenceRow.evaluate(el => el.getBoundingClientRect().top >= 0 && el.getBoundingClientRect().top < innerHeight), true, 'the final DOI row is revealed after preceding rows arrive');
-    await page.locator('style').filter({ hasText: '.paper-row { min-height: 500px !important; } .paper-list { overflow-anchor: none; }' }).evaluate(el => el.remove());
+    assert.equal(await revealStyle.evaluate(el => el.isConnected), true, 'reveal fixture style survives the library refresh');
+    assert.equal(await referenceRow.evaluate(el => getComputedStyle(el).minHeight), '500px', 'tall preceding rows remain active through reveal');
+    await revealStyle.evaluate(el => el.remove());
+    await revealStyle.dispose();
     await referenceRow.getByText('Reference only', { exact: true }).waitFor();
     assert.match(await page.locator('.notice').innerText(), /Existing paper reused.*Reference saved without a PDF/);
     assert.deepEqual((await detail(doi.id)).projectIds, [projects[1].id], 'no requested projects leaves existing assignments intact');
