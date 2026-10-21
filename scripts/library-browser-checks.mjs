@@ -341,7 +341,7 @@ export async function libraryManagementChecks(browser, base) {
     await page.getByRole('button', { name: 'Organize paper', exact: true }).click();
     await page.getByLabel('Library retained', { exact: true }).uncheck(); await waitSaved(page);
     assert.deepEqual((await detail(firstId)).projectIds, []);
-    await page.reload(); await page.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await page.reload(); await page.locator('.workspace').getByRole('button', { name: 'Organize paper', exact: true }).click();
     assert.equal(await page.getByLabel('Library retained', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'Archive paper', exact: true }).click();
     await page.getByRole('button', { name: 'Permanently delete', exact: true }).waitFor();
