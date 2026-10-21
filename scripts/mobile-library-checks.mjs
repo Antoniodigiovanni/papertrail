@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
+import { openNavigation, touchTarget, uiEvidence } from './browser-ui-checks.mjs';
 
 const json = async response => { assert.equal(response.ok(), true, await response.text()); return response.json(); };
 const saved = row => row.locator('[data-save-state="Saved"]').waitFor({ state: 'attached' });
-const touchTarget = async (locator, label) => {
-  const box = await locator.boundingBox();
-  assert.ok(box && box.width >= 44 && box.height >= 44, `${label} has a 44px target: ${JSON.stringify(box)}`);
-};
 const withinViewport = async locator => {
   const box = await locator.boundingBox();
   assert.ok(box && box.x >= 0 && box.x + box.width <= await locator.page().evaluate(() => innerWidth) + 1, 'control stays inside the viewport');
@@ -21,7 +18,7 @@ const menuAction = async (row, action) => {
   await row.getByRole('menuitem', { name: action, exact: true }).click();
 };
 const navigate = async (page, name) => {
-  await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+  await openNavigation(page);
   await page.getByRole('navigation', { name: 'Library navigation', exact: true }).getByRole('button', { name, exact: false }).click();
 };
 
@@ -42,6 +39,35 @@ export async function mobileLibraryChecks(browser, base) {
     await page.goto(base);
     const row = page.locator(`#paper-row-${ids[1]}`), longRow = page.locator(`#paper-row-${ids[0]}`);
     await row.waitFor();
+    // Exercise project geometry here too: the responsive-only runner skips the
+    // longer library management suite. Include actual touch and reduced motion.
+    for (const reducedMotion of ['no-preference', 'reduce']) {
+      await page.emulateMedia({ reducedMotion });
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        await openNavigation(page);
+        const projects = page.getByRole('navigation', { name: 'Projects', exact: true });
+        const selectProject = projects.getByRole('button', { name: project.name, exact: true });
+        const projectMenu = projects.getByRole('button', { name: `Actions for project ${project.name}`, exact: true });
+        const label = `${width}px, motion=${reducedMotion}`;
+        await touchTarget(selectProject, `Long project selection: ${label}`);
+        await touchTarget(projectMenu, `Long project menu trigger: ${label}`);
+        await withinViewport(selectProject); await withinViewport(projectMenu);
+        const selectBox = await selectProject.boundingBox(), menuBox = await projectMenu.boundingBox();
+        assert.ok(selectBox.x + selectBox.width <= menuBox.x, `project selection and actions do not overlap: ${JSON.stringify({ selectBox, menuBox })}`);
+        await projectMenu.tap();
+        const menu = projects.getByRole('menu'); await menu.waitFor(); await withinViewport(menu);
+        const items = await menu.getByRole('menuitem').all();
+        assert.equal(items.length, 2);
+        for (const item of items) await touchTarget(item, `Project menu action ${await item.innerText()}: ${label}`);
+        await page.getByRole('heading', { name: 'Your library', exact: true }).waitFor();
+        await page.screenshot({ path: `test-results/library-project-${width}-${reducedMotion}.png`, fullPage: true });
+        await page.keyboard.press('Escape');
+        assert.equal(await projectMenu.evaluate(el => el === document.activeElement), true);
+        await page.getByRole('button', { name: 'Close navigation', exact: true }).tap();
+      }
+    }
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     for (const width of [360, 390, 430]) {
       await page.setViewportSize({ width, height: 844 });
       await bounds(page);
@@ -172,8 +198,9 @@ export async function mobileLibraryChecks(browser, base) {
       await page.screenshot({ path: `test-results/library-responsive-${width}.png`, fullPage: true });
     }
     assert.deepEqual(errors, []);
-    console.log('PASS: mobile 360/390/430px bounds, 44px targets, long titles/tags/projects, keyboard/touch menus, selection and real exports, filters/search, organize/filename saves, upload/reveal, reader entry, archive/restore/delete; tablet/desktop regression. Screenshots are browser emulation, not physical devices.');
+    console.log('PASS: mobile 360/390/430px bounds; 320/390px project/menu 44px targets with normal and reduced motion, long project names and touch input; long titles/tags, keyboard/touch menus, selection and real exports, filters/search, organize/filename saves, upload/reveal, reader entry, archive/restore/delete; tablet/desktop regression. Geometry: test-results/library-browser-evidence.jsonl. Screenshots are browser emulation, not physical devices.');
   } catch (error) {
+    await uiEvidence(page, `Responsive failure: ${error.message}`).catch(() => {});
     await page.screenshot({ path: 'test-results/library-responsive-failure.png', fullPage: true }).catch(() => {});
     throw error;
   } finally {

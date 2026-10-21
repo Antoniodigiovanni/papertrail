@@ -75,8 +75,8 @@
 
 
 /* Project actions are separate from project selection. */
-.project-actions{position:relative;flex-shrink:0}
-.project-menu-trigger{display:flex;align-items:center;justify-content:center;width:44px;min-height:44px;padding:0;border:0;background:transparent;font-size:26px;color:#35483a}
+.project-actions{position:relative;flex:0 0 44px;min-width:44px}
+.project-menu-trigger{display:flex;align-items:center;justify-content:center;width:44px;min-width:44px;min-height:44px;flex-shrink:0;padding:0;border:0;background:transparent;font-size:26px;color:#35483a}
 .project-menu{position:absolute;right:0;top:100%;z-index:30;min-width:164px;padding:5px;background:#fafbf7;border:1px solid #c1ccba;border-radius:6px;box-shadow:0 5px 18px #20311f25}
 .project-menu button{display:block;width:100%;min-height:44px;padding:10px 12px;text-align:left;border:0;background:transparent;font-size:13px}
 .project-menu button:hover,.project-menu button:focus-visible{background:#e7eddf}
@@ -117,7 +117,7 @@
 .paper-selection{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:16px}
 .paper-selection input{accent-color:#496a4a;margin:0}
 .action-menu{position:relative}
-.paper-menu-trigger{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;background:transparent;border:0;font-size:26px}
+.paper-menu-trigger{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;flex-shrink:0;padding:0;background:transparent;border:0;font-size:26px}
 .paper-menu{position:absolute;top:100%;right:0;z-index:30;width:190px;max-width:calc(100vw - 32px);padding:5px;background:#fafbf7;border:1px solid #becab6;border-radius:7px;box-shadow:0 5px 18px #20311f25}
 .paper-menu>button{display:block;min-height:44px;width:100%;border:0;text-align:left;font-size:14px;background:transparent;margin:0}
 .paper-menu>button:hover,.paper-menu>button:focus-visible{background:#e7eddf}

@@ -12,6 +12,7 @@ import { assertPainted, assertPassageHighlight, desktopZoomChecks, mobileReaderC
 
 await mkdir('test-results',{recursive:true});
 await writeFile('test-results/reader-browser-evidence.jsonl','');
+await writeFile('test-results/library-browser-evidence.jsonl','');
 const data=await mkdtemp(path.resolve('test-results/browser-'));
 const port=Number(process.env.SMOKE_PORT||3491),base=`http://127.0.0.1:${port}`;
 const server=spawn(process.execPath,['dist/server/index.js'],{env:{...process.env,AUTH_MODE:'development',HOST:'127.0.0.1',PORT:String(port),DATA_DIR:data,PUBLIC_ORIGIN:base},stdio:['ignore','pipe','pipe']});

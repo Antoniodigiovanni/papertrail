@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
+import { openNavigation, touchTarget, uiEvidence, waitForReader } from './browser-ui-checks.mjs';
 
 const waitSaved = page => page.waitForFunction(() => [...document.querySelectorAll('.library-paper-controls [role=status], .save-state')].every(el => el.textContent.includes('Saved')));
 const json = async response => { assert.equal(response.ok(), true, await response.text()); return response.json(); };
@@ -279,9 +280,18 @@ export async function libraryManagementChecks(browser, base) {
     // Exercise a long name, dialog focus containment and actions at phone widths.
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
-      await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+      await openNavigation(page);
       const mobileTrigger = actions('Library shared renamed');
-      const bounds = await mobileTrigger.boundingBox(); assert.ok(bounds.width >= 44 && bounds.height >= 44);
+      await touchTarget(mobileTrigger, `Project menu at ${width}px`);
+      await touchTarget(projectNav.getByRole('button', { name: 'Library shared renamed', exact: true }), `Project selection at ${width}px`);
+      await mobileTrigger.click();
+      const mobileProjectMenu = page.getByRole('menu', { name: 'Actions for project Library shared renamed', exact: true });
+      await mobileProjectMenu.waitFor();
+      const mobileProjectItems = await mobileProjectMenu.getByRole('menuitem').all();
+      assert.equal(mobileProjectItems.length, 2);
+      for (const item of mobileProjectItems)
+        await touchTarget(item, `Project menu item at ${width}px`);
+      await page.keyboard.press('Escape');
       await projectAction('Library shared renamed', 'Rename');
       await nameInput.fill('Long project name '.repeat(5).trim());
       await checkRenameFocus(renameDialog.getByRole('button', { name: 'Save name', exact: true }));
@@ -292,9 +302,9 @@ export async function libraryManagementChecks(browser, base) {
     }
     const longName = 'A long project name with room for deeper research and useful connections';
     await page.setViewportSize({ width: 320, height: 844 });
-    await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+    await openNavigation(page);
     await projectNav.getByRole('button', { name: 'Library shared renamed', exact: true }).click();
-    await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+    await openNavigation(page);
     await projectAction('Library shared renamed', 'Rename'); await nameInput.fill(longName);
     await renameDialog.getByRole('button', { name: 'Save name', exact: true }).click();
     await actions(longName).waitFor();
@@ -341,7 +351,26 @@ export async function libraryManagementChecks(browser, base) {
     await page.getByRole('button', { name: 'Organize paper', exact: true }).click();
     await page.getByLabel('Library retained', { exact: true }).uncheck(); await waitSaved(page);
     assert.deepEqual((await detail(firstId)).projectIds, []);
-    await page.reload(); await page.locator('.workspace').getByRole('button', { name: 'Organize paper', exact: true }).click();
+    // Reload initially renders the library while the hash-selected reader loads.
+    // Hold the detail response so this check always exercises that intermediate
+    // frame, even when the local API would otherwise respond immediately.
+    let releaseReader;
+    const readerGate = new Promise(resolve => { releaseReader = resolve; });
+    const holdReader = async route => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      const response = await route.fetch(); await readerGate; await route.fulfill({ response });
+    };
+    await page.route(firstUrl, holdReader);
+    try {
+      const readerRequest = page.waitForRequest(request => request.url() === firstUrl && request.method() === 'GET');
+      await page.reload(); await readerRequest;
+      await first.waitFor();
+      assert.equal(await page.locator('.workspace').count(), 0, 'reader is pending during the initial library frame');
+      await uiEvidence(page, 'Reload: reader pending, initial library frame');
+    } finally { releaseReader(); }
+    const reloadedReader = await waitForReader(page, firstId, 'Library first paper');
+    await page.unroute(firstUrl, holdReader);
+    await reloadedReader.getByRole('button', { name: 'Organize paper', exact: true }).click();
     assert.equal(await page.getByLabel('Library retained', { exact: true }).isChecked(), false);
     await page.getByRole('button', { name: 'Archive paper', exact: true }).click();
     await page.getByRole('button', { name: 'Permanently delete', exact: true }).waitFor();
@@ -363,6 +392,7 @@ export async function libraryManagementChecks(browser, base) {
     assert.deepEqual(errors, []);
     console.log('PASS: keyboard/touch project menus, rename validation/duplicates/cancellation/errors/conflicts/reload persistence with unchanged paper data, compact PDF/reference status icons; library/reader contextual tag creation, reuse and removal; delayed multi-project reassignment; reload persistence; conflict/error rollback; confirmed project deletion preserves paper data/PDF/annotations and clears selected project; orphan Unassigned; archive/restore; cancelled and confirmed permanent paper deletion from library and detail.');
   } catch (error) {
+    await uiEvidence(page, `Library failure: ${error.message}`).catch(() => {});
     await page.screenshot({ path: 'test-results/library-management-failure.png', fullPage: true }).catch(() => {});
     throw error;
   } finally { await context.close(); }
