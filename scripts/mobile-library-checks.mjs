@@ -79,7 +79,7 @@ export async function mobileLibraryChecks(browser, base) {
       }
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' });
-    for (const width of [360, 390, 430]) {
+    for (const width of [320, 360, 390, 430]) {
       await page.setViewportSize({ width, height: 844 });
       await bounds(page);
       assert.equal(await page.locator('.page-heading .eyebrow').isVisible(), false);

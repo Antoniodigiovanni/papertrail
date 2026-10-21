@@ -41,7 +41,14 @@ export async function desktopLibraryChecks(browser, base) {
           const info = await box(row.locator('.paper-info'));
           inside(summary, rowBox, 'summary fits the row'); inside(open, summary, 'open button fits the summary');
           inside(trigger, rowBox, 'actions fit the row'); inside(info, open, 'text fits its open button');
-          assert.ok(right(open) <= trigger.x + 1, 'paper text and actions have separate columns');
+          if (width > 760) assert.ok(right(open) <= trigger.x + 1, `desktop text and actions have separate columns: ${JSON.stringify({ width, row: rowBox, summary, open, trigger, info })}`);
+          else {
+            assert.ok(right(info) <= trigger.x + 1, `mobile text stays clear of its overlaid action target: ${JSON.stringify({ width, info, trigger })}`);
+            assert.ok(parseFloat(await row.locator('.paper-open').evaluate(el => getComputedStyle(el).paddingRight)) >= trigger.width, 'the open-button hitbox reserves the full action target');
+          }
+          const availability = await box(row.locator('.paper-file-status'));
+          assert.ok(availability.width <= 100 && availability.height <= 22, 'visible PDF availability stays compact');
+          inside(availability, info, 'availability stays in the text column');
           assert.ok(trigger.width >= 44 && trigger.height >= 44, 'actions retain a usable target');
           assert.equal(await row.locator('[data-save-state=Saved]').isVisible(), false, 'Saved adds no second row');
           assert.equal(await row.getByRole('button', { name: 'Archive paper', exact: true }).count(), 0, 'archive is in the menu');

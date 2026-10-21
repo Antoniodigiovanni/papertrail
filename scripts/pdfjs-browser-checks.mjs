@@ -15,7 +15,7 @@ export async function pdfStreamCompatibilityChecks(browser, base) {
         delete ReadableStream.prototype[Symbol.asyncIterator];
         delete ReadableStream.prototype.values;
       });
-      const page = await control.newPage(); await page.goto(base);
+      const page = await control.newPage(); await page.goto(`${base}/favicon.svg`);
       const error = await page.evaluate(async id => {
         const pdfjs = await import('/vendor/pdfjs/pdf.mjs');
         pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';

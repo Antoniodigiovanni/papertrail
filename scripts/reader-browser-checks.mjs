@@ -108,10 +108,17 @@ export async function selectFixturePassage(page, passage, stage) {
 
 export async function assertPainted(page, number) {
   const selector = `.pdf-page[data-page-number="${number}"]`;
+  try {
   await page.waitForFunction(selector => {
     const el = document.querySelector(selector);
     return el?.dataset.rendered === 'true' && Math.abs(Number(el.dataset.renderWidth) - el.clientWidth) < 1 && el.querySelector('.textLayer span');
   }, selector);
+  } catch (error) {
+    await readerEvidence(page, `paint timeout page ${number}`);
+    const errors = await page.locator(`${selector} [role=alert]`).allTextContents();
+    error.message += `; page errors: ${JSON.stringify(errors)}`;
+    throw error;
+  }
   const ink = await page.locator(`${selector} canvas`).evaluate(canvas => {
     if (!canvas.width || !canvas.height) return false;
     const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;

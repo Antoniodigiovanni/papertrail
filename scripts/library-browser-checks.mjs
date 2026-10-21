@@ -267,12 +267,12 @@ export async function libraryManagementChecks(browser, base) {
     assert.deepEqual(await detail(firstId), renameBefore);
     assert.deepEqual(await detail(secondId), renameOrphan);
     assert.deepEqual(await (await context.request.get(`${firstUrl}/pdf`)).body(), renamePdf);
-    // Compact icons describe file availability, without pretending to render thumbnails.
-    await first.getByText('PDF available', { exact: true }).waitFor();
-    assert.equal(await first.locator('.paper-file-icon svg').count(), 1);
-    const iconBounds = await first.locator('.paper-file-icon').boundingBox();
-    assert.ok(iconBounds.width <= 28 && iconBounds.height <= 28);
-    assert.equal(await first.locator('.paper-icon, img, canvas').count(), 0);
+    assert.equal(await first.locator('.paper-file-status').textContent(), 'PDF available');
+    assert.equal(await first.locator('.paper-file-status').isVisible(), true, 'availability remains visible beside the filename');
+    const availability = await first.locator('.paper-file-status').boundingBox();
+    assert.ok(availability.width <= 100 && availability.height <= 22, 'availability indicator is visibly compact');
+    const iconBounds = await first.locator('.pdf-thumbnail').boundingBox();
+    assert.ok(iconBounds.width <= 42 && iconBounds.height <= 56);
     const referenceFixture = async route => {
       const response = await route.fetch(); const data = await response.json();
       data.papers = data.papers.map(p => p.id === secondId ? { ...p, pdfSha: null, pageCount: null } : p);
@@ -281,9 +281,10 @@ export async function libraryManagementChecks(browser, base) {
     await page.route('**/api/library?*', referenceFixture);
     await page.reload(); await second.getByText('Reference only', { exact: true }).waitFor();
     assert.equal(await second.getByText('PDF available', { exact: true }).count(), 0);
-    await second.getByText('No PDF attached', { exact: true }).waitFor();
+    assert.equal(await second.locator('.paper-meta-empty').textContent(), 'No PDF attached');
+    assert.equal(await second.locator('.paper-meta-empty').isVisible(), false, 'reference summary stays compact');
     await page.unroute('**/api/library?*', referenceFixture); await page.reload();
-    await second.getByText('PDF available', { exact: true }).waitFor();
+    assert.equal(await second.locator('.paper-file-status').textContent(), 'PDF available');
     // Exercise a long name, dialog focus containment and actions at phone widths.
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });

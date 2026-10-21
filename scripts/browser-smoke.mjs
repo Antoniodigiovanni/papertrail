@@ -1,3 +1,4 @@
+import { thumbnailChecks } from './thumbnail-browser-checks.mjs';
 import { chromium, webkit } from 'playwright';
 import { pdfStreamCompatibilityChecks } from './pdfjs-browser-checks.mjs';
 import { libraryManagementChecks } from './library-browser-checks.mjs';
@@ -31,8 +32,12 @@ try{
   if(!started)errors.push(`Live HTTP server could not start/reply:\n${serverOutput}`);
   try{browser=await (process.env.PAPERTRAIL_WEBKIT ? webkit : chromium).launch({headless:true});}catch(e){errors.push(`Browser could not launch:\n${e.message}`);}
   if(errors.length)throw new Error(errors.join('\n\n'));
+  if (process.env.PAPERTRAIL_THUMBNAILS_ONLY) {
+    await thumbnailChecks(browser,base);
+  } else {
   if (!process.env.PAPERTRAIL_PDF_COMPAT_ONLY) {
     if (!process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
+      await thumbnailChecks(browser,base);
       await importLibraryChecks(browser,base);
       await libraryManagementChecks(browser,base);
     }
@@ -165,6 +170,7 @@ try{
   console.log('Screenshots: test-results/reader-desktop.png and reader-mobile-emulation.png. Physical devices were not tested.');
   console.log('Reader evidence: test-results/reader-browser-evidence.jsonl (selection geometry; native diagonal and independent bidirectional pan, scroll bounds, hit-target touch-action chain and event cancellation).');
   await other.close();await context.close();
+  }
   }
   }
 }catch(e){

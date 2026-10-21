@@ -7,6 +7,7 @@ import type { AnnotationInput, Position } from '../server/schema';
 import { renderPageLayers } from './pdf-render';
 import { bindReaderTouch } from './reader-touch';
 import { MIN_ZOOM, MAX_ZOOM, clampZoom, canvasScale, anchoredScroll } from './reader-geometry';
+import { prioritizeReader } from './pdf-thumbnail';
 const PAGE_PREFETCH_MARGIN = 900;
 type SelectionDraft = {
     page: number;
@@ -57,6 +58,7 @@ export function Reader({ paper, jump, onPosition, onHighlight, onSelectHighlight
     const [matches, setMatches] = useState<number[]>([]);
     const [match, setMatch] = useState(0);
     useEffect(() => {
+        prioritizeReader(true);
         let canceled = false;
         let loading: {
             destroy: () => Promise<void>;
@@ -71,7 +73,7 @@ export function Reader({ paper, jump, onPosition, onHighlight, onSelectHighlight
                 setDoc(document);
         }).catch(e => { if (!canceled)
             setError(`Could not render PDF: ${e.message}. Retry loading or download the original PDF.`); });
-        return () => { canceled = true; void loading?.destroy(); };
+        return () => { canceled = true; void loading?.destroy().catch(() => {}); prioritizeReader(false); };
     }, [paper.id]);
     const captureAnchor = useCallback((clientX?: number, clientY?: number): Anchor | null => {
         const root = scroll.current;
@@ -341,6 +343,7 @@ function PdfPageView({ doc, pageNumber, width, renderWidth, root, annotations, s
             setRendered(false);
             return;
         }
+        setRendered(false);
         let canceled = false;
         let render: ReturnType<typeof renderPageLayers> | undefined;
         // Every generation owns its canvas/text nodes. Never resize a canvas still
@@ -379,7 +382,16 @@ function PdfPageView({ doc, pageNumber, width, renderWidth, root, annotations, s
                 setError(`Page ${pageNumber} could not render: ${e.message}`);
             }
         });
-        return () => { canceled = true; render?.cancel(); };
+        return () => {
+            canceled = true;
+            render?.cancel();
+            surface.remove();
+            // Release backing memory only after PDF.js has stopped using it.
+            void (render?.promise || Promise.resolve()).catch(() => {}).finally(() => {
+                target.width = target.height = 0;
+                textLayer.replaceChildren();
+            });
+        };
     }, [doc, pageNumber, renderWidth, visible]);
     useEffect(() => {
         const spans = artwork.current?.querySelectorAll('.textLayer span');
