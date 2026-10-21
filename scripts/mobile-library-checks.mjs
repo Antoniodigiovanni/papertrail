@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
-import { openNavigation, touchTarget, uiEvidence } from './browser-ui-checks.mjs';
+import { focused, menuClosed, menuDiagnostics, openNavigation, touchTarget, uiEvidence } from './browser-ui-checks.mjs';
 
 const json = async response => { assert.equal(response.ok(), true, await response.text()); return response.json(); };
 const saved = row => row.locator('[data-save-state="Saved"]').waitFor({ state: 'attached' });
@@ -15,16 +15,27 @@ const bounds = async page => {
 };
 const menuAction = async (row, action) => {
   await row.locator('.paper-menu-trigger').click();
+  await focused(row.getByRole('menuitem').first(), 'Paper menu opening focus');
   await row.getByRole('menuitem', { name: action, exact: true }).click();
 };
 const navigate = async (page, name) => {
   await openNavigation(page);
   await page.getByRole('navigation', { name: 'Library navigation', exact: true }).getByRole('button', { name, exact: false }).click();
 };
+const resizeMenuViewport = async (page, viewport) => {
+  const since = await page.evaluate(() => performance.now());
+  await page.setViewportSize(viewport);
+  // Device metrics can be acknowledged before the page receives resize. Observe
+  // the real event and let its React update commit before checking preserved focus.
+  await page.waitForFunction(({ since, width, height }) => window.__papertrailMenuTrace.some(event =>
+    event.type === 'resize' && event.time >= since && event.width === width && event.height === height), { since, ...viewport });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+};
 
 export async function mobileLibraryChecks(browser, base) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
+  await menuDiagnostics(page);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const ids = [];
   let project;
@@ -63,7 +74,7 @@ export async function mobileLibraryChecks(browser, base) {
         await page.getByRole('heading', { name: 'Your library', exact: true }).waitFor();
         await page.screenshot({ path: `test-results/library-project-${width}-${reducedMotion}.png`, fullPage: true });
         await page.keyboard.press('Escape');
-        assert.equal(await projectMenu.evaluate(el => el === document.activeElement), true);
+        await menuClosed(projectMenu, menu);
         await page.getByRole('button', { name: 'Close navigation', exact: true }).tap();
       }
     }
@@ -91,22 +102,64 @@ export async function mobileLibraryChecks(browser, base) {
       ]) await touchTarget(locator, label);
       await row.locator('.paper-menu-trigger').click();
       const menu = row.getByRole('menu'); await withinViewport(menu);
+      const trigger = row.locator('.paper-menu-trigger');
+      const firstItem = menu.getByRole('menuitem').first();
+      await focused(firstItem, 'Pointer opening moves focus into the paper menu');
       for (const item of await menu.getByRole('menuitem').all()) await touchTarget(item, 'Menu action');
+      // A resize with a still-visible trigger must not silently remove the
+      // focused item. This deterministically fails the old unconditional close.
+      await page.evaluate(() => new Promise(resolve => {
+        window.dispatchEvent(new Event('resize'));
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      }));
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'true', 'same-layout resize retains the open menu');
+      await focused(firstItem, 'Same-layout resize retains menu focus');
+      await resizeMenuViewport(page, { width, height: 800 });
+      await focused(firstItem, 'Height resize retains menu focus');
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
+      await resizeMenuViewport(page, { width, height: 844 });
+      await uiEvidence(page, 'Paper menu before full-page screenshot', trigger);
       await page.screenshot({ path: `test-results/library-mobile-${width}-menu.png`, fullPage: true });
+      await uiEvidence(page, 'Paper menu after full-page screenshot, before Escape', trigger);
+      assert.equal(await trigger.getAttribute('aria-expanded'), 'true', 'screenshot must not dismiss the paper menu');
+      await focused(firstItem, 'Menu is still focused before Escape');
       await page.keyboard.press('Escape');
-      assert.equal(await row.locator('.paper-menu-trigger').evaluate(el => el === document.activeElement), true);
+      await menuClosed(trigger, menu);
+      await uiEvidence(page, 'Paper menu after Escape', trigger);
       await page.screenshot({ path: `test-results/library-mobile-${width}.png`, fullPage: true });
     }
     // Keyboard menu navigation and outside dismissal still work in a touch context.
-    await row.locator('.paper-menu-trigger').focus(); await page.keyboard.press('ArrowDown');
-    await row.getByRole('menuitem', { name: 'Organize paper', exact: true }).waitFor();
-    assert.equal(await row.getByRole('menuitem', { name: 'Organize paper', exact: true }).evaluate(el => el === document.activeElement), true);
-    await page.keyboard.press('End');
-    assert.equal(await row.getByRole('menuitem', { name: 'Archive paper', exact: true }).evaluate(el => el === document.activeElement), true);
-    await page.keyboard.press('Home'); await page.keyboard.press('Tab');
-    assert.equal(await row.getByRole('menu').count(), 0);
-    await row.locator('.paper-menu-trigger').click(); await page.getByLabel('Search library', { exact: true }).click();
-    assert.equal(await row.getByRole('menu').count(), 0);
+    const trigger = row.locator('.paper-menu-trigger'), menu = row.getByRole('menu');
+    const organize = row.getByRole('menuitem', { name: 'Organize paper', exact: true });
+    const archive = row.getByRole('menuitem', { name: 'Archive paper', exact: true });
+    await trigger.tap(); await focused(organize);
+    await trigger.tap(); await menuClosed(trigger, menu);
+    for (const key of ['ArrowDown', 'Enter', 'Space']) {
+      await trigger.focus(); await page.keyboard.press(key);
+      await focused(organize, `${key} opens at the first action`);
+      await page.keyboard.press('End'); await focused(archive);
+      await page.keyboard.press('ArrowDown'); await focused(organize, 'ArrowDown wraps');
+      await page.keyboard.press('ArrowUp'); await focused(archive, 'ArrowUp wraps');
+      await page.keyboard.press('Home'); await focused(organize);
+      await page.keyboard.press('Escape'); await menuClosed(trigger, menu);
+    }
+    await page.keyboard.press('ArrowUp'); await focused(archive, 'ArrowUp opens at the last action');
+    await page.keyboard.press('Shift+Tab'); await menuClosed(trigger, menu, row.locator('.paper-open'));
+    await trigger.focus(); await page.keyboard.press('ArrowDown'); await focused(organize);
+    await page.keyboard.press('Tab'); await menuClosed(trigger, menu, longRow.locator('.paper-open'));
+    const search = page.getByLabel('Search library', { exact: true });
+    await trigger.click(); await focused(organize); await search.click();
+    await menuClosed(trigger, menu, search);
+    await trigger.click(); await focused(organize); await search.focus();
+    await menuClosed(trigger, menu, search);
+    // Crossing the desktop breakpoint hides the trigger: dismiss, retain the
+    // paper's keyboard position, and do not reopen on return to mobile.
+    await trigger.click(); await focused(organize);
+    await resizeMenuViewport(page, { width: 768, height: 844 });
+    await menuClosed(trigger, menu, row);
+    await resizeMenuViewport(page, { width: 430, height: 844 });
+    assert.equal(await menu.count(), 0);
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
     // Search and both real API-backed filters; include an empty result.
     await page.getByLabel('Search library', { exact: true }).fill('Mobile reading collection');
     await longRow.waitFor({ state: 'detached' }); await row.waitFor();
@@ -138,18 +191,21 @@ export async function mobileLibraryChecks(browser, base) {
     await page.getByRole('button', { name: 'Done', exact: true }).click();
     assert.equal(await row.getByRole('checkbox').isVisible(), false);
     // Organize long projects/tags through the menu; revision-aware saves and filename download.
-    await menuAction(row, 'Organize paper');
+    await trigger.focus(); await page.keyboard.press('ArrowDown'); await focused(organize);
+    await page.keyboard.press('Enter');
     await row.getByRole('region', { name: 'Organize Mobile reading collection', exact: true }).waitFor();
-    assert.equal(await row.getByRole('region').evaluate(el => el === document.activeElement), true);
+    await focused(row.getByRole('region'), 'Organize action moves focus into the organizer');
     await row.getByLabel(project.name, { exact: true }).uncheck(); await saved(row);
     assert.deepEqual((await context.request.get(`${base}/api/papers/${ids[1]}`).then(json)).projectIds, []);
     await row.getByLabel(project.name, { exact: true }).check(); await saved(row);
     await bounds(page);
     await page.screenshot({ path: 'test-results/library-mobile-organize.png', fullPage: true });
     await row.getByRole('button', { name: 'Close paper organizer', exact: true }).click();
+    await row.getByRole('region').waitFor({ state: 'detached' });
+    await focused(trigger, 'Closing organizer returns to paper actions');
     await menuAction(row, 'Rename PDF');
     const filename = row.getByLabel('PDF filename', { exact: true });
-    assert.equal(await filename.evaluate(el => el === document.activeElement), true);
+    await focused(filename, 'Rename PDF action focuses the filename');
     await filename.fill('Mobile evidence.pdf');
     await row.getByRole('button', { name: 'Save PDF filename', exact: true }).click(); await saved(row);
     assert.equal((await context.request.get(`${base}/api/papers/${ids[1]}`).then(json)).pdfFilename, 'Mobile evidence.pdf');

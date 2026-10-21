@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
-import { openNavigation, touchTarget, uiEvidence, waitForReader } from './browser-ui-checks.mjs';
+import { focused, menuClosed, menuDiagnostics, openNavigation, touchTarget, uiEvidence, waitForReader } from './browser-ui-checks.mjs';
 
 const waitSaved = page => page.waitForFunction(() => [...document.querySelectorAll('.library-paper-controls [role=status], .save-state')].every(el => el.textContent.includes('Saved')));
 const json = async response => { assert.equal(response.ok(), true, await response.text()); return response.json(); };
@@ -9,6 +9,7 @@ const json = async response => { assert.equal(response.ok(), true, await respons
 export async function libraryManagementChecks(browser, base) {
   const context = await browser.newContext({ viewport: { width: 1366, height: 900 } });
   const page = await context.newPage();
+  await menuDiagnostics(page);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const library = () => context.request.get(`${base}/api/library`).then(json);
   const detail = id => context.request.get(`${base}/api/papers/${id}`).then(json);
@@ -16,6 +17,7 @@ export async function libraryManagementChecks(browser, base) {
   const actions = name => projectNav.getByRole('button', { name: `Actions for project ${name}`, exact: true });
   const projectAction = async (name, action) => {
     await actions(name).click();
+    await focused(page.getByRole('menuitem', { name: `Rename project ${name}`, exact: true }), 'Project menu opening focus');
     await page.getByRole('menuitem', { name: `${action} project ${name}`, exact: true }).click();
   };
   const row = title => page.locator('.paper-row').filter({ has: page.locator('.paper-title', { hasText: title }) });
@@ -180,47 +182,50 @@ export async function libraryManagementChecks(browser, base) {
     await trigger.focus(); await page.keyboard.press('Enter');
     const renameItem = page.getByRole('menuitem', { name: 'Rename project Library shared', exact: true });
     const deleteItem = page.getByRole('menuitem', { name: 'Delete project Library shared', exact: true });
-    assert.equal(await renameItem.evaluate(el => el === document.activeElement), true);
+    await focused(renameItem, 'Project menu opening focus');
     assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
-    await page.keyboard.press('ArrowDown'); assert.equal(await deleteItem.evaluate(el => el === document.activeElement), true);
-    await page.keyboard.press('Home'); assert.equal(await renameItem.evaluate(el => el === document.activeElement), true);
-    await page.keyboard.press('End'); assert.equal(await deleteItem.evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press('ArrowDown'); await focused(deleteItem);
+    await page.keyboard.press('Home'); await focused(renameItem);
+    await page.keyboard.press('End'); await focused(deleteItem);
     await page.keyboard.press('Escape');
-    assert.equal(await page.getByRole('menu').count(), 0);
-    assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
-    await page.keyboard.press('ArrowUp'); assert.equal(await deleteItem.evaluate(el => el === document.activeElement), true);
+    await menuClosed(trigger, page.getByRole('menu'));
+    await page.keyboard.press('ArrowUp'); await focused(deleteItem);
     await page.keyboard.press('Shift+Tab');
-    assert.equal(await page.getByRole('menu').count(), 0);
-    assert.equal(await projectNav.getByRole('button', { name: 'Library shared', exact: true }).evaluate(el => el === document.activeElement), true);
+    await menuClosed(trigger, page.getByRole('menu'), projectNav.getByRole('button', { name: 'Library shared', exact: true }));
     await page.keyboard.press('Tab');
     assert.equal(await page.getByRole('menu').count(), 0);
     await trigger.focus(); await page.keyboard.press('Space');
-    await page.getByRole('menu').waitFor(); await page.keyboard.press('Tab');
+    await focused(renameItem); await page.keyboard.press('Tab');
+    await page.getByRole('menu').waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('menu').count(), 0, 'Tab leaves the menu');
     assert.equal(await trigger.evaluate(el => el === document.activeElement), false);
     await trigger.click(); await page.getByLabel('Search library', { exact: true }).focus();
+    await page.getByRole('menu').waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('menu').count(), 0, 'focus outside dismisses menu');
     await trigger.click(); await page.getByRole('heading', { name: 'Library shared', exact: true }).click();
+    await page.getByRole('menu').waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('menu').count(), 0, 'outside pointer dismisses menu');
     await projectAction('Library shared', 'Rename');
     const renameDialog = page.getByRole('dialog', { name: 'Rename project', exact: true });
     const nameInput = renameDialog.getByLabel('Project name', { exact: true });
-    assert.equal(await nameInput.evaluate(el => el === document.activeElement), true);
+    await focused(nameInput, 'Rename dialog opening focus');
     const checkRenameFocus = async lastButton => {
       await lastButton.focus(); await page.keyboard.press('Tab');
-      assert.equal(await nameInput.evaluate(el => el === document.activeElement), true, 'Tab wraps to the first dialog control');
+      await focused(nameInput, 'Tab wraps to the first dialog control');
       await page.keyboard.press('Shift+Tab');
-      assert.equal(await lastButton.evaluate(el => el === document.activeElement), true, 'Shift+Tab wraps to the last enabled dialog control');
+      await focused(lastButton, 'Shift+Tab wraps to the last enabled dialog control');
     };
     await checkRenameFocus(renameDialog.getByRole('button', { name: 'Save name', exact: true }));
     await nameInput.fill('Canceled draft');
     await renameDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-    assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
+    await renameDialog.waitFor({ state: 'detached' });
+    await focused(trigger, 'Rename dialog restores project trigger focus');
     assert.equal((await library()).projects.find(p => p.id === shared.id).name, 'Library shared');
     await projectAction('Library shared', 'Rename'); await nameInput.fill('Escape draft'); await page.keyboard.press('Escape');
+    await renameDialog.waitFor({ state: 'detached' });
     assert.equal(await renameDialog.count(), 0);
     await projectAction('Library shared', 'Rename'); await nameInput.fill('Outside draft');
-    await page.mouse.click(2, 2); assert.equal(await renameDialog.count(), 0);
+    await page.mouse.click(2, 2); await renameDialog.waitFor({ state: 'detached' }); assert.equal(await renameDialog.count(), 0);
     await projectAction('Library shared', 'Rename');
     await nameInput.fill('   '); await renameDialog.getByRole('button', { name: 'Save name', exact: true }).click();
     assert.match(await renameDialog.getByRole('alert').innerText(), /Enter a project name/);
@@ -292,12 +297,14 @@ export async function libraryManagementChecks(browser, base) {
       for (const item of mobileProjectItems)
         await touchTarget(item, `Project menu item at ${width}px`);
       await page.keyboard.press('Escape');
+      await menuClosed(mobileTrigger, mobileProjectMenu);
       await projectAction('Library shared renamed', 'Rename');
       await nameInput.fill('Long project name '.repeat(5).trim());
       await checkRenameFocus(renameDialog.getByRole('button', { name: 'Save name', exact: true }));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await renameDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-      assert.equal(await mobileTrigger.evaluate(el => el === document.activeElement), true);
+      await renameDialog.waitFor({ state: 'detached' });
+      await focused(mobileTrigger, 'Mobile rename dialog restores trigger focus');
       await page.getByRole('button', { name: 'Close navigation', exact: true }).click();
     }
     const longName = 'A long project name with room for deeper research and useful connections';
@@ -332,7 +339,7 @@ export async function libraryManagementChecks(browser, base) {
     await projectAction('Library shared', 'Delete');
     assert.equal((await library()).projects.some(p => p.id === shared.id), true);
     assert.deepEqual(await detail(firstId), preserved); assert.deepEqual(await detail(secondId), orphan);
-    assert.equal(await actions('Library shared').evaluate(el => el === document.activeElement), true);
+    await focused(actions('Library shared'), 'Canceled project deletion restores trigger focus');
     page.once('dialog', dialog => dialog.accept());
     await projectAction('Library shared', 'Delete');
     await page.getByRole('heading', { name: 'Your library', exact: true }).waitFor();

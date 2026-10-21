@@ -1,6 +1,50 @@
 import assert from 'node:assert/strict';
 import { appendFile } from 'node:fs/promises';
 
+// Capture the event order around dismissal, including capture-induced resize.
+// Bounded and test-only: no application logging or production instrumentation.
+export async function menuDiagnostics(page) {
+  await page.addInitScript(() => {
+    const describe = element => element instanceof Element ? ({ tag: element.tagName, id: element.id, className: element.className, role: element.getAttribute('role'), text: element.textContent?.slice(0, 100) }) : null;
+    window.__papertrailMenuTrace = [];
+    const record = event => {
+      window.__papertrailMenuTrace.push({
+        time: performance.now(), type: event.type, key: event.key,
+        width: innerWidth, height: innerHeight, target: describe(event.target), focus: describe(document.activeElement),
+        menus: [...document.querySelectorAll('.action-menu, .project-actions')].filter(root => root.querySelector('[aria-expanded=true], [role=menu]')).map(root => ({
+          trigger: root.querySelector('[aria-haspopup=menu]')?.outerHTML, menu: !!root.querySelector('[role=menu]'),
+        })),
+      });
+      if (window.__papertrailMenuTrace.length > 150) window.__papertrailMenuTrace.shift();
+    };
+    for (const type of ['pointerdown', 'focusin', 'focusout', 'keydown', 'keyup']) document.addEventListener(type, record, true);
+    window.addEventListener('resize', record);
+  });
+}
+
+// React's passive effects (organizer/dialog focus in particular) can run after a
+// locator is attached. Wait for the exact focus contract, with bounded failure
+// diagnostics; never click/focus the expected element to make an assertion pass.
+export async function focused(locator, label = 'Expected keyboard focus') {
+  const page = locator.page();
+  const element = await locator.elementHandle();
+  assert.ok(element, `${label}: element must exist`);
+  try {
+    await page.waitForFunction(el => el.isConnected && el === document.activeElement, element, { timeout: 3000 });
+    assert.equal(await locator.evaluate(el => el === document.activeElement), true, label);
+  } catch (error) {
+    const evidence = await uiEvidence(page, label, locator);
+    throw new Error(`${label}: ${JSON.stringify(evidence)}`, { cause: error });
+  } finally { await element.dispose(); }
+}
+
+export async function menuClosed(trigger, menu, destination = trigger) {
+  await menu.waitFor({ state: 'detached' });
+  assert.equal(await trigger.getAttribute('aria-expanded'), 'false', 'closed trigger exposes aria-expanded=false');
+  assert.equal(await trigger.getAttribute('aria-controls'), null, 'closed trigger no longer controls a menu');
+  await focused(destination, 'Menu dismissal focus');
+}
+
 // Keep the unrounded browser geometry: a failure must distinguish layout size,
 // clipping and an ancestor's in-flight transform from the settled target.
 export async function uiEvidence(page, label, locator = page.locator('.sidebar, .workspace'), details = {}) {
@@ -26,6 +70,8 @@ export async function uiEvidence(page, label, locator = page.locator('.sidebar, 
       reader: !!document.querySelector('.workspace'), library: !!document.querySelector('.shell'),
       readerTitle: document.querySelector('.reader-heading strong')?.textContent,
       focus: document.activeElement?.outerHTML.slice(0, 500),
+      menus: [...document.querySelectorAll('.action-menu, .project-actions')].map(root => ({ trigger: root.querySelector('[aria-haspopup=menu]')?.outerHTML, menu: root.querySelector('[role=menu]')?.outerHTML })),
+      menuTrace: window.__papertrailMenuTrace,
     })),
   };
   await appendFile('test-results/library-browser-evidence.jsonl', `${JSON.stringify(evidence)}\n`);
