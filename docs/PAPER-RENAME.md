@@ -25,8 +25,11 @@ rollback, real revision conflicts, explicit reload, library/reader persistence,
 independent filename editing and byte-identical downloads. API tests additionally
 check invalid/stale title writes and preservation after reopening SQLite.
 
-Run `npm run verify` and `npm run test:browser`. In this restricted workspace,
-browser execution is blocked before UI assertions by loopback listen EPERM and
-Chromium sandbox startup failure. Browser tests need a capable host; no physical
-Windows Chrome/Edge or mobile test is claimed. Existing metadata is not repaired
-by renaming; see PDF-METADATA-INVESTIGATION.md for the separate extraction issue.
+Run `npm run verify` and `npm run test:browser`. The latest retry passes API and
+persistence regressions, but browser execution is blocked before scenarios by
+localhost listen EPERM and Chromium sandbox startup failure. Earlier reported
+browser acceptance predates the latest edits. The browser source covers
+320/360/390/430px mobile, 1482px desktop and CSS-width zoom equivalents; those cases
+need execution on a capable host. No physical Windows Chrome/Edge, mobile device
+or native browser zoom pass is claimed. Existing metadata is not repaired by
+renaming; see PDF-METADATA-INVESTIGATION.md for the separate extraction issue.

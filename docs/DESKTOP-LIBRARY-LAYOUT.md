@@ -11,8 +11,9 @@ Actions start on the same row, while an expanded organizer or save error spans
 both columns. Idle Saved feedback occupies no row. Titles, authors and venue
 metadata have two-line bounds; long download filenames use ellipsis with their
 full name in the hover title and filename editor. Projects/tags wrap within the
-text column. The redundant PDF badge and Local PDF line are omitted when the
-filename already describes the file. Selection and reading state stay visible.
+text column. PDF availability and the ellipsized filename share one compact line; the
+availability badge remains visible and the redundant Local PDF line is omitted.
+Selection and reading state stay visible.
 
 Mobile keeps its existing reading layout, touch targets, selection mode and
 reader behavior, using the same Actions menu. Menus choose available space above
@@ -27,8 +28,9 @@ text line bounds, unobscured menu items and a full-width organizer. Cases includ
 case covers the responsive transition. 1186/988/741px model available CSS space
 at 125/150/200% zoom on a 1482px display; DPR alone is not browser zoom.
 
-These checks run with `npm run test:browser`, `npm run test:browser:library`, or
-`npm run test:browser:responsive`. Evidence is written under `test-results/`.
-This sandbox blocks loopback binding and Chromium startup before UI assertions;
-new screenshots and successful geometry execution require a capable host. No
-physical Windows Chrome/Edge or native browser zoom test is claimed.
+`npm run test:browser` and `npm run test:browser:responsive` exercise these checks.
+The latest retry could not execute browser geometry: localhost binding returns
+EPERM and Chromium exits at sandbox startup. Earlier reported Chromium acceptance
+predates the current thumbnail/cancellation edits and does not verify them. Run the
+commands above on a host that permits the test server/browser. Physical Windows
+Chrome/Edge and native browser zoom remain untested.

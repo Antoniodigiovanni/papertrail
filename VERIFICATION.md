@@ -1,10 +1,112 @@
 # Verification record
 
-Date: **2026-10-21**. The current project UX work is recorded first;
-earlier reader/import evidence follows as historical context. Browser assertions
-added here have not executed in this restricted environment.
+Date: **2026-10-21**. The current retry results take precedence over earlier
+reported acceptance. Earlier entries are preserved as history and do not verify
+the latest working files.
 
-## Project menu, rename and file-status changes
+## Current retry acceptance
+
+`npm run verify` exited **0**: TypeScript, ESLint, **83/83 tests**, production build.
+The final command log is `test-results/retry-acceptance-verify.log`; the complete
+command/exit/timeout record is `test-results/retry-acceptance-status.json`.
+
+| Command | Exit | Seconds | Timeout |
+| --- | ---: | ---: | ---: |
+| `npm run verify` | 0 | 103.92 | 600 |
+| `npm run test:browser:responsive` | 1 | 45.54 | 600 |
+| `npm run test:browser:thumbnails` | 1 | 44.23 | 600 |
+| `npm run test:browser:pdf-compat` | 1 | 43.07 | 600 |
+| `npm run test:browser` | 1 | 42.28 | 900 |
+
+The requested responsive, thumbnails, PDF compatibility and full browser commands
+were attempted sequentially, with a **900-second timeout for the full suite**.
+Their latest logs are `test-results/retry-acceptance-{responsive,thumbnails,pdf-compat,browser-full}.log`.
+Browser startup fails before scenarios: `listen EPERM 127.0.0.1:3491` and Chromium
+`sandbox_host_linux.cc:41` shutdown Operation not permitted. The browser has worked
+on another host; these are observed restrictions of this retry, not a claim about
+that host. There is no current UI/pixel/layout/browser pass or new screenshot.
+
+Implemented and covered by passing Node tests:
+
+- Thumbnail cancellation releases its scheduling slot without waiting for PDF.js
+  loading or destroy promises. Late completion cannot release a later slot. Tests
+  cover never-settling loading/destroy, timeout, module completion after cancellation
+  and render cancellation/backing-store cleanup.
+- New PDF ingestion reads Info fields without crossing lines, handles valid XMP
+  CDATA and duplicate keys/creators, rejects unrelated fields/tool labels, and falls
+  back to the original safe filename. A duplicate upload preserves existing
+  misleading metadata, filename, note and PDF bytes. No existing record is repaired.
+- API/persistence tests cover independent paper title/PDF filename edits, stale
+  revisions, projects, tags, archive/delete and byte/data preservation. Real bundled
+  PDF.js page-2 text negative/positive controls and stream iterator semantics pass.
+
+Browser source retains real nonuniform canvas pixel checks with bundled PDF.js,
+authenticated same-origin PDF requests, observer-driven lazy loading, worker/canvas
+cleanup, safe fallback and object URL accounting. It adds a deliberately stalled
+loading/destroy task followed by real thumbnail/reader paint. The twelve-canvas
+check now requires all fifteen fixtures to have painted, exactly twelve retained
+canvases, no more than twelve at peak, and zero workers after completion. Failure
+records include request history, row states and geometry. The earlier reported
+fallback/12-canvas timeout remains **unverified in a running browser**; a related
+queue-release defect is fixed and unit-tested, but host execution must establish
+whether another observer/queue issue remains. No assertion was relaxed to resolve
+that timeout.
+
+Responsive browser checks cover 320/360/390/430 CSS px and desktop around 1482 px,
+44px interactive targets, overflow, both rename actions, compact row geometry and
+a visible availability badge no larger than 100 × 22px beside the filename.
+Those assertions have not executed in this retry. The existing import-reveal,
+project rename/delete, tag/multi-project, archive/delete and reader checks remain.
+Physical Safari 26.5 build 21624.2.5.11.4, Windows, mobile and native browser zoom
+remain untested. No deployment, restart or production data access occurred. Main
+must not be updated until the remaining browser acceptance passes.
+
+## Earlier reported integrated acceptance (predates this retry)
+
+The following was recorded by an earlier attempt. It is not independent evidence
+for the current code, which includes subsequent unverified browser edits.
+
+Observed results:
+
+- `npm run verify` passed typecheck, ESLint, all **77 tests**, and the production build.
+  The tests include empty/malformed PDF metadata and XMP preference, data preservation,
+  import and filename APIs, Safari stream iterator handling, and reader geometry/render
+  lifecycle regressions.
+- Final `npm run test:browser` exited **0** in Chromium. It passed the real PDF page-one
+  preview pixel check from a generated PDF, lazy loading, bounded canvas size/count,
+  offscreen cancellation and canvas/worker cleanup, unavailable-PDF fallback, zero
+  retained object URLs, and continued reader rendering. It also passed upload/arXiv/DOI
+  reveal, project/tag/assignment/archive/delete flows, independent paper-title and PDF
+  filename editing/downloads, the full responsive checks, three stream feature modes,
+  PDF page 2 rendering, search, selection/highlighting, reload, zoom, pinch/pan/cancel,
+  virtualization, notes and deletion.
+- `npm run test:browser:responsive` exited **0**: desktop geometry at 1482 CSS px and
+  zoom-equivalent widths; mobile 320/360/390/430 px checks, 44 px targets, menus, import
+  reveal, rename, project management, exports, filters, archive and deletion.
+- `npm run test:browser:thumbnails` exited **0** for focused first-page/lazy-load,
+  memory/cancellation/fallback and reader-priority assertions.
+- `npm run test:browser:pdf-compat` exited **0** in Chromium for native streams and
+  absent `ReadableStream` async-iterator symbols before PDF.js loads. Page 2, text,
+  search, zoom, selection/highlights and reload all passed in each mode.
+- Two earlier `npm run test:browser:library` attempts stopped at visibility assertions
+  for deliberately CSS-hidden redundant status text; the tests were corrected to check
+  both the text and intended visibility/compactness. The final full suite passed those
+  management flows. The responsive suite independently passed too.
+
+Metadata extraction's newline-crossing bug was reproduced with a synthetic valid PDF
+and actual Poppler output, then fixed for new ingestion only. The parser now reads a
+single line, rejects field labels and common tool markers, prefers meaningful XMP, and
+falls back to a usable filename. The tests and source do not inspect or rewrite existing
+library records or original PDF bytes; no correct title/author was guessed.
+
+All browser results above are Playwright Chromium emulation. Safari 26.5 on the named
+macOS build, physical iOS/iPadOS and Android, physical Windows Chrome/Edge, and actual
+native browser zoom remain untested. Stream feature-mode emulation is evidence for the
+fallback code path, not a claim of Safari validation. No production data, credentials
+or services were accessed or changed; no restart, deployment, push or migration was
+performed.
+
+## Earlier project menu, rename and file-status changes
 
 Inspected SPEC, client cards/sidebar/reader management, API validation, SQLite
 labels/deletion, backup format and API/browser regressions before making changes.

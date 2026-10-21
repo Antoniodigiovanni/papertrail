@@ -4,16 +4,16 @@ A private, self-hosted paper library and browser PDF reader. One shared library,
 with Cloudflare Access authentication and no application accounts. Online-first:
 reading, annotations and synchronization require a connection to your server.
 
-**Verification status:** `npm run verify` passes type/lint checks, all **50 tests**,
-and the production build. Project rename and library-management changes add API/persistence
-regressions and real browser acceptance flows. Browser execution was attempted;
-loopback HTTP binding fails with `EPERM` and Chromium exits with a sandbox
-permission error before UI assertions. Run `npm run test:browser:library` and
-`npm run test:browser` on a host that permits them. Physical-device verification
-and the previously recorded reader browser follow-up remain outstanding.
-The production import failure remains unresolved; this change does not touch
-production data, configuration or services. See [VERIFICATION.md](VERIFICATION.md)
-for exact check results and outstanding checks.
+**Verification status:** the latest `npm run verify` passes type/lint checks,
+all **83 tests**, and the production build. Browser acceptance is outstanding:
+the latest runner attempts fail before scenarios because localhost listening and
+Chromium startup are denied. Earlier reported browser passes predate the current
+thumbnail lifecycle changes. The implementation includes first-page PDF.js previews,
+separate paper/PDF rename actions, compact responsive rows and new-ingestion metadata
+repair. Existing library records and PDF bytes are preserved. Physical Safari
+26.5 build 21624.2.5.11.4, mobile devices, Windows Chrome/Edge and native browser
+zoom remain unverified. No production service/data change or deployment occurred.
+See [VERIFICATION.md](VERIFICATION.md) for actual results and remaining checks.
 
 ## Native setup
 
@@ -129,10 +129,12 @@ permissive CORS policy. `PUBLIC_ORIGIN` also checks browser mutation origins.
   papers with none appear in Unassigned. Archived papers stay in Archive.
   Deleting the selected project returns to All papers and keeps valid tag/search/
   reading-state filters. Open editors with stale memberships must reload.
-- The small file icon and **PDF available** / **Reference only** badge on each row
-  report whether a PDF is attached. The old empty PDF tile was decorative, with
-  no thumbnail image or loading path. Actual thumbnail previews are not implemented;
-  choose a paper with a PDF to open the existing reader.
+- The left thumbnail renders page one of an attached PDF from the same-origin,
+  authenticated endpoint with the bundled PDF.js/worker pair. Visible rows load lazily;
+  only one preview renders at once, each canvas is capped at 120 × 160 pixels, and
+  at most 12 small canvases are retained. Scrolling away, opening the reader or
+  unmounting releases preview work and canvas memory. Unsupported/unavailable PDFs
+  fall back to a compact PDF icon; references without a PDF show **Reference only**.
 - Library search covers bibliographic fields, projects, tags, general notes,
   highlighted passages and comments. Project, tag and reading-state filters combine.
 - **Organize paper** on a library row and **Details** in the reader include a
