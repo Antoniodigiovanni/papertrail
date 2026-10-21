@@ -17,7 +17,6 @@ const pdfinfo = await new Promise((resolve, reject) => {
   child.stdin.on('error', reject); child.stdin.end(bytes);
 });
 const parsed = await validatePdf(bytes);
-assert.equal(parsed.title, 'Subject:');
-assert.equal(parsed.authors.length, 1);
-assert.match(parsed.authors[0], /^Creator:[ \t]+LaTeX with hyperref$/);
+assert.equal(parsed.title, undefined);
+assert.equal(parsed.authors, undefined);
 console.log(JSON.stringify({ fixture: 'Empty Title, Subject and Author; Creator LaTeX with hyperref', pdfinfo, parsed }, null, 2));

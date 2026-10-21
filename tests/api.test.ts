@@ -11,7 +11,7 @@ import { authBoundary } from '../server/auth.js';
 import { normalizeArxiv, normalizeDoi } from '../server/schema.js';
 import { importReference, publicAddress, validateProviderUrl } from '../server/providers.js';
 import { bibtex, citationKey, markdownHtml } from '../server/exports.js';
-import { textPdf, arxivXml, crossrefFixture } from './fixture.js';
+import { textPdf, metadataPdf, arxivXml, crossrefFixture } from './fixture.js';
 import type { PaperDetail } from '../client/api.js';
 import { importLibraryNotice, importLibraryView, type ImportResult } from '../client/library-import.js';
 let directory: string;
@@ -823,4 +823,27 @@ test('permanent paper deletion removes only its data and retains projects, tags 
     assert.deepEqual(store.db.prepare('SELECT * FROM paper_projects WHERE paperId=?').all(p.id), []);
     assert.deepEqual(store.db.prepare('SELECT * FROM paper_tags WHERE paperId=?').all(p.id), []);
     assert.equal(readdirSync(store.files).length, 1);
+});
+
+test('empty upload title uses original filename and thumbnail endpoint returns unchanged authenticated PDF bytes', async () => {
+    const bytes = metadataPdf('<< /Title () /Subject () /Author () /Creator (LaTeX with hyperref) >>');
+    const response = await app.request('http://localhost/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-Filename': 'usable-research.pdf' }, body: new Uint8Array(bytes) });
+    assert.equal(response.status, 201);
+    const p = (await response.json()).paper;
+    assert.equal(p.title, 'usable-research');
+    assert.equal(p.pdfFilename, 'usable-research.pdf');
+    const pdf = await request(`/api/papers/${p.id}/pdf`);
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.headers.get('content-type'), 'application/pdf');
+    assert.deepEqual(Buffer.from(await pdf.arrayBuffer()), bytes);
+    assert.match(pdf.headers.get('content-security-policy') || '', /worker-src 'self'/);
+    // Simulate an existing record with the historically misparsed strings. A
+    // duplicate import must leave its stored metadata and original file alone.
+    store.patch(p.id, { revision: p.revision, title: 'Subject:', authors: ['Creator: LaTeX with hyperref'], note: 'Existing notes' });
+    const existing = store.get(p.id);
+    const duplicate = await app.request('http://localhost/api/upload', { method: 'POST', headers: { 'Content-Type': 'application/pdf', 'X-Filename': 'different-name.pdf' }, body: new Uint8Array(bytes) });
+    assert.equal(duplicate.status, 200);
+    assert.equal((await duplicate.json()).duplicate, true);
+    assert.deepEqual(store.get(p.id), existing);
+    assert.deepEqual(store.pdfBytes(p.pdfSha), bytes);
 });

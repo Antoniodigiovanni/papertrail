@@ -34,3 +34,21 @@ export function textPdf(title = 'The Architecture of Understanding', pageCount =
 }
 export const arxivXml = (id = '2401.12345v1') => `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/${id}</id><title>Understanding &amp; Evidence</title><author><name>Ada Lovelace</name></author><author><name>Alan Turing</name></author><published>2024-01-23T00:00:00Z</published><summary>A paper about evidence.</summary><link href="https://arxiv.org/pdf/${id}" title="pdf"/></entry></feed>`;
 export const crossrefFixture = (doi = '10.1234/evidence') => ({ message: { DOI: doi, title: ['Understanding {Evidence} & Reasoning'], author: [{ given: 'Ada', family: 'Lovelace' }], published: { 'date-parts': [[2024]] }, 'container-title': ['Journal of Reading'], abstract: '<p>Research &amp; reflection.</p>' } });
+
+// Rebuild offsets after changing metadata; malformed fixture offsets can hide parser defects.
+export function metadataPdf(info: string, xmp?: string): Buffer {
+    const objects = [...textPdf().toString().matchAll(/\d+ 0 obj\n([\s\S]*?)\nendobj/g)].map(match => match[1]);
+    const infoId = objects.length;
+    objects[infoId - 1] = info;
+    if (xmp !== undefined) {
+        objects[0] = objects[0].replace(' /Pages', ` /Metadata ${objects.length + 1} 0 R /Pages`);
+        objects.push(`<< /Type /Metadata /Subtype /XML /Length ${Buffer.byteLength(xmp)} >>\nstream\n${xmp}\nendstream`);
+    }
+    let pdf = '%PDF-1.7\n';
+    const offsets: number[] = [];
+    objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+    const xref = Buffer.byteLength(pdf);
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` + offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')
+        + `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    return Buffer.from(pdf);
+}
