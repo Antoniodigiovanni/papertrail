@@ -105,6 +105,7 @@ permissive CORS policy. `PUBLIC_ORIGIN` also checks browser mutation origins.
   its button. Clicking or focusing outside dismisses the menu. Mobile controls
   provide 44 px targets; Close navigation or Escape dismisses the sidebar.
 - Rename opens a focused dialog. Enter a name and choose **Save name** (or Enter);
+  Tab and Shift+Tab wrap between its enabled controls, including during conflict recovery.
   Cancel, Escape or a backdrop click discards the draft before submission. Names
   are trimmed and must contain 1–100 characters. Existing exact names are rejected
   without merging projects; letter case remains significant, as in label creation.

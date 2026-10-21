@@ -489,3 +489,19 @@ trackpads. Full Caddy/Cloudflare/systemd import success requires separate operat
 verification. Docker build/runtime and cold-volume restore were not rerun. Existing
 backup/export/security/persistence regressions remain in `npm run verify`; they do
 not substitute for these missing browser/device/production checks.
+
+## Project rename dialog focus regression (2026-10-21)
+
+The reported host browser failure at `library-browser-checks.mjs:242` occurred
+when Tab from Save name did not return to Project name. The dialog previously
+relied entirely on native `showModal()` focus behavior. It now explicitly wraps
+Tab and Shift+Tab between the first and last enabled controls. Disabled Save name
+is excluded during conflict recovery. Browser regression assertions cover both
+directions on desktop, after a conflict, and at 320/390 px widths.
+
+Validation: `npm run verify` passes all 43 tests, typecheck, lint and build.
+`npm run test:browser` and the initial `npm run test:browser:library` attempt
+could not reach UI assertions: local listen on 127.0.0.1:3491 returned `EPERM`,
+and Chromium exited with `sandbox_host_linux.cc` / Operation not permitted.
+The reported host failure was not reproduced or confirmed fixed in this sandbox;
+the updated browser regression must be rerun on a capable host. No schema changes.

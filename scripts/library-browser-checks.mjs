@@ -167,6 +167,13 @@ export async function libraryManagementChecks(browser, base) {
     const renameDialog = page.getByRole('dialog', { name: 'Rename project', exact: true });
     const nameInput = renameDialog.getByLabel('Project name', { exact: true });
     assert.equal(await nameInput.evaluate(el => el === document.activeElement), true);
+    const checkRenameFocus = async lastButton => {
+      await lastButton.focus(); await page.keyboard.press('Tab');
+      assert.equal(await nameInput.evaluate(el => el === document.activeElement), true, 'Tab wraps to the first dialog control');
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await lastButton.evaluate(el => el === document.activeElement), true, 'Shift+Tab wraps to the last enabled dialog control');
+    };
+    await checkRenameFocus(renameDialog.getByRole('button', { name: 'Save name', exact: true }));
     await nameInput.fill('Canceled draft');
     await renameDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     assert.equal(await trigger.evaluate(el => el === document.activeElement), true);
@@ -200,6 +207,7 @@ export async function libraryManagementChecks(browser, base) {
     await renameDialog.getByRole('button', { name: 'Reload latest project', exact: true }).waitFor();
     assert.equal(await nameInput.inputValue(), 'Stale draft');
     assert.equal(await renameDialog.getByRole('button', { name: 'Save name', exact: true }).isDisabled(), true);
+    await checkRenameFocus(renameDialog.getByRole('button', { name: 'Reload latest project', exact: true }));
     await renameDialog.getByRole('button', { name: 'Reload latest project', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.rename-project-dialog input')?.value === 'Library remote');
     await nameInput.fill('  Library shared renamed  ');
@@ -238,8 +246,7 @@ export async function libraryManagementChecks(browser, base) {
       const bounds = await mobileTrigger.boundingBox(); assert.ok(bounds.width >= 44 && bounds.height >= 44);
       await projectAction('Library shared renamed', 'Rename');
       await nameInput.fill('Long project name '.repeat(5).trim());
-      await renameDialog.getByRole('button', { name: 'Save name', exact: true }).focus();
-      await page.keyboard.press('Tab'); assert.equal(await nameInput.evaluate(el => el === document.activeElement), true, 'dialog contains keyboard focus');
+      await checkRenameFocus(renameDialog.getByRole('button', { name: 'Save name', exact: true }));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       await renameDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       assert.equal(await mobileTrigger.evaluate(el => el === document.activeElement), true);

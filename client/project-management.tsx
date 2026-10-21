@@ -96,7 +96,13 @@ export function RenameProjectDialog({ project, onClose, onRenamed }: {
         } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
         finally { setBusy(false); }
     };
-    return createPortal(<dialog ref={dialog} className="modal rename-project-dialog" aria-labelledby={titleId} aria-describedby={hintId} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onClick={event => {
+    return createPortal(<dialog ref={dialog} className="modal rename-project-dialog" aria-labelledby={titleId} aria-describedby={hintId} onKeyDown={event => {
+        if (event.key !== 'Tab') return;
+        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('input:not([disabled]), button:not([disabled])')];
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onClick={event => {
         const bounds = dialog.current!.getBoundingClientRect();
         if (!busy && event.target === dialog.current && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) onClose();
     }}>
