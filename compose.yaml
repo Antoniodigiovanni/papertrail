@@ -1,0 +1,28 @@
+services:
+  papertrail:
+    build: .
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    environment:
+      AUTH_MODE: access
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /app/data
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN to the HTTPS application URL}
+      ACCESS_TEAM_DOMAIN: ${ACCESS_TEAM_DOMAIN:?Set ACCESS_TEAM_DOMAIN}
+      ACCESS_AUDIENCE: ${ACCESS_AUDIENCE:?Set ACCESS_AUDIENCE}
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    volumes:
+      - papertrail-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 2g
+volumes:
+  papertrail-data:

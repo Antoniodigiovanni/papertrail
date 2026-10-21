@@ -1,0 +1,24 @@
+[Unit]
+Description=Papertrail paper library
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/hermes/workspace/papertrail
+EnvironmentFile=/home/hermes/workspace/papertrail-deploy/runtime.env
+ExecStart=/usr/bin/node /home/hermes/workspace/papertrail/dist/server/index.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/hermes/workspace/papertrail-data
+RestrictSUIDSGID=true
+TasksMax=128
+MemoryMax=2G
+
+[Install]
+WantedBy=default.target

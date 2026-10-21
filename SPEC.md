@@ -1,0 +1,46 @@
+# Papertrail — v1 specification
+
+## Product
+A self-hosted personal paper archive and browser PDF reader, usable on iOS/iPadOS Safari, Android Chrome, and laptop Chrome/Firefox. One shared personal library, no app accounts; Cloudflare Access provides authentication. No existing library to migrate.
+
+## Agreed scope
+- Projects and library-wide tags. A paper belongs to multiple projects without duplicated files. All papers and Unassigned views; combine project and tag filters.
+- Discoverable library-row Organize and Archive actions; Organize is also available directly from the reader header. Edit any number of project memberships after import, including none, without reimporting or duplicating files. Queued saves use current revisions and the latest confirmed assignments; optimistic choices roll back on failure and conflicts require Reload latest.
+- Tags are set in context on each paper using removable chips, suggestions from existing library-wide tags, and a type/create input. Removing a chip affects only that paper. Reuse an existing exact, trimmed tag name; retain useful sidebar/dropdown filtering, without primary-sidebar tag creation or project-style tag management.
+- Each sidebar project has a right-aligned vertical-ellipsis actions menu with Rename and Delete project. Support keyboard navigation, focus return, Escape and outside dismissal, descriptive accessible names and touch targets. Rename uses a modal dialog, trims names to 1–100 characters and rejects an existing exact name (case-sensitive, consistent with label creation) without merging projects. Compare the name loaded for editing before saving; stale renames require explicit Reload latest project. Keep the selected project ID and update its name everywhere; do not change paper records, revisions, assignments or PDF bytes.
+- Library cards use a compact file icon and explicit PDF available / Reference only status. These are availability indicators, not PDF thumbnails; thumbnail generation is outside this change.
+- Confirmed project deletion removes only the project and its membership rows. NEVER delete papers, PDFs, annotations, notes, tags, reading state or positions. Keep other project memberships; papers with no remaining memberships appear in Unassigned (archived papers stay archived). Clear a deleted selected project and retain valid other filters. Advance affected paper revisions so stale editors cannot silently restore old memberships.
+- Import local PDFs, arXiv IDs/URLs, and DOI strings/URLs. Choose a project or leave unassigned. Fetch bibliographic metadata automatically where available; all fields editable. Retain a reference if PDF retrieval is unavailable; allow manual PDF attachment. Never imply DOI access circumvents publisher restrictions.
+- Detect duplicates by normalized DOI, arXiv identity, and file SHA-256; reuse existing papers and offer project assignment. Model arXiv versions deliberately rather than silently corrupting annotations on replacement.
+- Browser PDF reader with zoom, navigation, search within an open text-based PDF, and text selection. Responsive sidebar on laptop and drawer/panel on touch devices.
+- Text highlights with colors and optional typed comments; no pen/freehand. Editable general note per paper, basic Markdown as an implementation default.
+- Annotations list navigates to the passage. Highlights anchor to PDF page coordinates and selected text, never viewport pixels. Preserve original PDF bytes.
+- Automatically save reading position (page and relative within-page position), annotations, and notes; show saving/saved/error states. Restore on another device. Prevent delayed/stale writes from silently overwriting newer state; define conflict behavior.
+- Search title, authors, metadata, tags, general notes, and highlight notes. No whole-library PDF-text index required.
+- Reading states Inbox, Reading, Finished; independent of project membership.
+- Archive by default, accessible from library and paper detail; restore from Archive. Permanent deletion is available only after archiving and requires explicit confirmation naming the paper and irreversible removal of its original PDF, notes, highlights, position and assignments. Keep other papers, projects and tags. Use the current revision and explicit ID confirmation; reject stale, malformed or unarchived deletion requests.
+- BibTeX export for selection, project, and whole library; deterministic unique citation keys and correct escaping. Markdown export includes metadata, general notes, highlighted passages, comments, and PDF page numbers.
+- Restorable backup includes original PDFs, metadata, annotations, positions, and project/tag assignments. Document and test restore.
+- Online-first v1; offline reading/annotation/sync are v2, not implemented promises. Stable IDs and separately stored annotations should leave room for v2.
+
+## Deployment and security
+- Straightforward reproducible self-host deployment, preferably Docker Compose, durable database and file storage, health endpoint, configuration example, operational documentation.
+- All UI, PDF/download, API, export and mutation routes must be protected by a coherent Cloudflare Access boundary. Document disabling direct public origin access. Do not merely trust spoofable identity headers. Prefer validated Access JWTs with issuer/audience/expiry checks; a clearly explicit loopback-only development mode is acceptable. Never default production to unauthenticated public service.
+- Safe PDF file handling, content/size checks, filename/path safety, parameterized queries, request validation, no arbitrary filesystem paths or commands.
+- arXiv/DOI fetches need bounded timeouts, download limits, SSRF protections including redirects and private/local targets; allowlisted providers preferred.
+- Escape metadata, notes and BibTeX correctly; sanitize rendered Markdown. No secrets in source or logs. Safe deletion and backup import, no zip traversal.
+- No external publication, deployment, telemetry, AI features, or paid services required.
+
+## Acceptance criteria
+1. Start from documented setup with persistent data. Upload a real text-based PDF, assign two projects and tags; only one stored paper/file results.
+2. Import arXiv and DOI through testable provider adapters; exercise real providers if network permits and report actual results. A DOI without an available PDF remains usable as metadata and accepts a later upload. Provider failures are actionable, never fabricated success.
+3. Open the PDF, select/highlight text and add a comment; reload and verify geometry and comment. Zoom and responsive viewport changes preserve anchors. Tap/select highlights and list entries to edit/jump. Prove interactions in browser automation where feasible; do not claim physical-device testing without it.
+4. Save general note and reading state; reopen in a separate browser context and verify persistence and restored position. Test stale/out-of-order saves and visible failure handling.
+5. Search metadata/tags/notes, filter by project/tag, archive/restore, cancel deletion, and confirm permanent deletion from library and detail. Create/reuse/remove per-paper tags and reassign multiple projects after import; reload to verify persistence. Exercise delayed saves, rejected assignments, rollback and conflict recovery. Delete a selected project with confirmation, verify filter recovery and orphan Unassigned visibility, and compare every retained paper field, notes, annotations, other assignments and PDF bytes. Include malformed/unknown IDs, missing/wrong confirmations, stale revisions and atomic rollback of invalid mixed assignments.
+6. Export and parse/check BibTeX and Markdown, including escaping and multiple citation keys.
+7. Backup a library, restore to fresh isolated storage, verify PDF checksums and all related records.
+8. Tests cover project rename validation, exact duplicate rejection, concurrent rename conflicts, database reopening/backup restoration and unchanged paper data. Browser checks cover project menu keyboard/focus/dismissal, rename cancellation/errors/persistence, compact PDF/reference status and mobile layout. Tests also cover validation, duplicate handling, authorization boundary, malicious URLs/uploads/Markdown, export, reading state and annotation persistence.
+9. Run type/lint checks, tests, production build and a live HTTP/browser smoke test. Document what ran, passed, failed, or remains unverified.
+
+## Implementation latitude
+Choose a maintainable stack after inspecting installed tools. PDF.js is the preferred rendering basis; do not substitute a plain PDF iframe for annotation functionality. Keep scope focused and dependencies reasonable. Tests and working vertical slices take priority over decorative features. Document architectural choices and limitations in README and VERIFICATION.md.
