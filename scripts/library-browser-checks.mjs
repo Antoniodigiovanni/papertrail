@@ -130,7 +130,9 @@ export async function libraryManagementChecks(browser, base) {
     // Real revision conflict rolls back an optimistic project choice and requires reload.
     const beforeConflict = await detail(firstId);
     await context.request.patch(firstUrl, { data: { revision: beforeConflict.revision, venue: 'Changed on another device' } }).then(json);
-    await first.getByLabel('Library retained', { exact: true }).uncheck();
+    // A rejected save can roll back before Playwright's uncheck postcondition.
+    // Click initiates the change; the following assertions verify rejection and rollback.
+    await first.getByLabel('Library retained', { exact: true }).click();
     await first.getByRole('button', { name: 'Reload latest', exact: true }).waitFor();
     assert.match(await first.getByRole('alert').innerText(), /changed on another device/);
     assert.equal(await first.getByLabel('Library retained', { exact: true }).isChecked(), true);
