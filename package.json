@@ -15,6 +15,8 @@
     "check:providers": "node scripts/check-providers.mjs",
     "check:import-route": "npm run build && node scripts/check-import-route.mjs",
     "test:browser:library": "npm run build && tsc -p tsconfig.tests.json && PAPERTRAIL_LIBRARY_ONLY=1 node scripts/browser-smoke.mjs",
+    "test:browser:pdf-compat": "npm run build && tsc -p tsconfig.tests.json && PAPERTRAIL_PDF_COMPAT_ONLY=1 node scripts/browser-smoke.mjs",
+    "test:browser:pdf-compat:webkit": "npm run build && tsc -p tsconfig.tests.json && PAPERTRAIL_PDF_COMPAT_ONLY=1 PAPERTRAIL_WEBKIT=1 node scripts/browser-smoke.mjs",
     "test:browser:responsive": "npm run build && tsc -p tsconfig.tests.json && PAPERTRAIL_RESPONSIVE_ONLY=1 node scripts/browser-smoke.mjs"
   },
   "keywords": [],

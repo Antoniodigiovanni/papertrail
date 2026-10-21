@@ -1,4 +1,5 @@
-import { chromium } from 'playwright';
+import { chromium, webkit } from 'playwright';
+import { pdfStreamCompatibilityChecks } from './pdfjs-browser-checks.mjs';
 import { libraryManagementChecks } from './library-browser-checks.mjs';
 import { importLibraryChecks } from './import-browser-checks.mjs';
 import { mobileLibraryChecks } from './mobile-library-checks.mjs';
@@ -25,14 +26,18 @@ try{
     await new Promise(resolve=>setTimeout(resolve,250));
   }
   if(!started)errors.push(`Live HTTP server could not start/reply:\n${serverOutput}`);
-  try{browser=await chromium.launch({headless:true});}catch(e){errors.push(`Chromium could not launch:\n${e.message}`);}
+  try{browser=await (process.env.PAPERTRAIL_WEBKIT ? webkit : chromium).launch({headless:true});}catch(e){errors.push(`Browser could not launch:\n${e.message}`);}
   if(errors.length)throw new Error(errors.join('\n\n'));
-  if (!process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
-    await importLibraryChecks(browser,base);
-    await libraryManagementChecks(browser,base);
+  if (!process.env.PAPERTRAIL_PDF_COMPAT_ONLY) {
+    if (!process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
+      await importLibraryChecks(browser,base);
+      await libraryManagementChecks(browser,base);
+    }
+    await mobileLibraryChecks(browser,base);
   }
-  await mobileLibraryChecks(browser,base);
   if (!process.env.PAPERTRAIL_LIBRARY_ONLY && !process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
+  await pdfStreamCompatibilityChecks(browser,base);
+  if (!process.env.PAPERTRAIL_PDF_COMPAT_ONLY) {
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage();const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
   const favicon=await context.request.get(`${base}/favicon.svg`);assert.equal(favicon.status(),200);assert.match(favicon.headers()['content-type'],/image\/svg\+xml/);assert.match(await favicon.text(),/<svg/);
@@ -155,6 +160,7 @@ try{
   console.log('Screenshots: test-results/reader-desktop.png and reader-mobile-emulation.png. Physical devices were not tested.');
   console.log('Reader evidence: test-results/reader-browser-evidence.jsonl (selection geometry; native diagonal and independent bidirectional pan, scroll bounds, hit-target touch-action chain and event cancellation).');
   await other.close();await context.close();
+  }
   }
 }catch(e){
   console.error(e.stack||e.message);process.exitCode=1;

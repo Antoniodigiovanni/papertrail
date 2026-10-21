@@ -1,3 +1,5 @@
+import { ensureStreamAsyncIteration } from './stream-compat.js';
+
 export type TextContent = {
     items: ({
         str: string;
@@ -61,6 +63,11 @@ export type PdfJs = {
 let modulePromise: Promise<PdfJs> | undefined;
 export function loadPdfJs(): Promise<PdfJs> {
     const moduleUrl = '/vendor/pdfjs/pdf.mjs';
-    modulePromise ??= import(/* @vite-ignore */ moduleUrl).then((module: PdfJs) => { module.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs'; return module; });
+    modulePromise ??= (async () => {
+        ensureStreamAsyncIteration();
+        const module: PdfJs = await import(/* @vite-ignore */ moduleUrl);
+        module.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+        return module;
+    })();
     return modulePromise;
 }
