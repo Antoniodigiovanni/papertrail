@@ -115,3 +115,8 @@ export async function waitForReader(page, id, title) {
   await uiEvidence(page, 'Reader ready', workspace);
   return workspace;
 }
+
+export async function paperAction(row, name) {
+  await row.locator('.paper-menu-trigger').click();
+  await row.getByRole('menuitem', { name, exact: true }).click();
+}

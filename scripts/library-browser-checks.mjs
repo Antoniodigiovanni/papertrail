@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { textPdf } from '../dist/tests/tests/fixture.js';
-import { focused, menuClosed, menuDiagnostics, openNavigation, touchTarget, uiEvidence, waitForReader } from './browser-ui-checks.mjs';
+import { focused, paperAction, menuClosed, menuDiagnostics, openNavigation, touchTarget, uiEvidence, waitForReader } from './browser-ui-checks.mjs';
 
 const waitSaved = page => page.waitForFunction(() => [...document.querySelectorAll('.library-paper-controls [role=status], .save-state')].every(el => el.textContent.includes('Saved')));
 const json = async response => { assert.equal(response.ok(), true, await response.text()); return response.json(); };
@@ -63,7 +63,7 @@ export async function libraryManagementChecks(browser, base) {
     await context.request.post(`${base}/api/papers/${firstId}/annotations`, { data: { page: 1, quote: 'Preserved passage', rects: [[.1, .1, .4, .2]], color: 'green', comment: 'Preserved annotation' } }).then(json);
     await page.getByRole('button', { name: 'Back to library', exact: true }).click();
     const first = row('Library first paper');
-    await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await paperAction(first, 'Organize paper');
     await addTag(first, 'library-reflection');
     const firstUrl = `${base}/api/papers/${firstId}`;
     // Filename edits are independent of title, storage identity and annotation anchors.
@@ -84,14 +84,14 @@ export async function libraryManagementChecks(browser, base) {
     const download = await downloadEvent;
     assert.equal(download.suggestedFilename(), editedFilename);
     assert.deepEqual(await readFile(await download.path()), filenameBytes);
-    await page.reload(); await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await page.reload(); await paperAction(first, 'Organize paper');
     assert.equal(await first.getByLabel('PDF filename', { exact: true }).inputValue(), editedFilename);
     await first.locator('.paper-open').click();
     await page.getByRole('button', { name: 'Details', exact: true }).click();
     assert.equal(await page.getByLabel('PDF filename', { exact: true }).inputValue(), editedFilename);
     assert.equal(await page.getByLabel('Title', { exact: true }).inputValue(), filenameBefore.title);
     await page.getByRole('button', { name: 'Back to library', exact: true }).click();
-    await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await paperAction(first, 'Organize paper');
     // Hold a saved response and queue several independent memberships and chip edits.
     let release;
     const gate = new Promise(resolve => { release = resolve; });
@@ -119,11 +119,11 @@ export async function libraryManagementChecks(browser, base) {
     const shared = labels.projects.find(p => p.name === 'Library shared');
     const retained = labels.projects.find(p => p.name === 'Library retained');
     assert.deepEqual(new Set((await detail(firstId)).projectIds), new Set([shared.id, retained.id]));
-    await page.reload(); await row('Library first paper').getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await page.reload(); await paperAction(row('Library first paper'), 'Organize paper');
     assert.equal(await first.getByLabel('Library shared', { exact: true }).isChecked(), true);
     assert.equal(await first.getByLabel('Library retained', { exact: true }).isChecked(), true);
     await first.getByRole('button', { name: 'Remove tag library-reflection', exact: true }).click(); await waitSaved(page);
-    await page.reload(); await first.getByRole('button', { name: 'Organize paper', exact: true }).click();
+    await page.reload(); await paperAction(first, 'Organize paper');
     assert.equal(await first.getByRole('button', { name: 'Remove tag library-reflection', exact: true }).count(), 0);
     await first.getByRole('button', { name: 'Add tag library-reflection', exact: true }).waitFor();
 
@@ -165,14 +165,14 @@ export async function libraryManagementChecks(browser, base) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'mobile library does not overflow horizontally');
     await page.screenshot({ path: 'test-results/library-management-mobile.png', fullPage: true });
     await page.setViewportSize({ width: 1366, height: 900 });
-    await second.getByRole('button', { name: 'Archive paper', exact: true }).click();
+    await paperAction(second, 'Archive paper');
     await second.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Archive', exact: false }).first().click();
-    await second.getByRole('button', { name: 'Permanently delete', exact: true }).waitFor();
+    await second.waitFor();
     page.once('dialog', dialog => { assert.match(dialog.message(), /irreversibly.*original PDF.*notes.*highlights.*cannot be undone/); return dialog.dismiss(); });
-    await second.getByRole('button', { name: 'Permanently delete', exact: true }).click();
+    await paperAction(second, 'Permanently delete');
     assert.equal((await detail(secondId)).archived, true);
-    await second.getByRole('button', { name: 'Return to library', exact: true }).click(); await second.waitFor({ state: 'detached' });
+    await paperAction(second, 'Return to library'); await second.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'All papers', exact: false }).click();
     await second.waitFor();
     // Project menus use a separate, touch-sized trigger and never select the project.
@@ -391,10 +391,10 @@ export async function libraryManagementChecks(browser, base) {
     assert.equal((await detail(secondId)).note, orphan.note);
     // Delete from the library Archive too, then clean up only this isolated fixture's projects.
     await page.getByRole('button', { name: 'All papers', exact: false }).click();
-    await second.getByRole('button', { name: 'Archive paper', exact: true }).click(); await second.waitFor({ state: 'detached' });
+    await paperAction(second, 'Archive paper'); await second.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Archive', exact: false }).first().click();
     page.once('dialog', dialog => dialog.accept());
-    await second.getByRole('button', { name: 'Permanently delete', exact: true }).click(); await second.waitFor({ state: 'detached' });
+    await paperAction(second, 'Permanently delete'); await second.waitFor({ state: 'detached' });
     assert.equal((await context.request.get(`${base}/api/papers/${secondId}`)).status(), 404);
     for (const p of (await library()).projects.filter(p => p.name.startsWith('Library ')))
       await context.request.delete(`${base}/api/projects/${p.id}`, { data: { confirmation: p.id } }).then(json);

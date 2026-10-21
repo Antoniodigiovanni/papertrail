@@ -82,11 +82,11 @@
 .project-menu button:hover,.project-menu button:focus-visible{background:#e7eddf}
 .project-menu .project-menu-delete{color:#8b3e32}
 .project-navigation>.nav>span:last-child{overflow-wrap:anywhere;white-space:normal}
-.rename-project-dialog{position:fixed;inset:0;height:fit-content;border:1px solid #c1ccba;color:inherit;max-width:calc(100vw - 32px);margin:auto}
-.rename-project-dialog::backdrop{background:#17241a60;backdrop-filter:blur(3px)}
-.rename-project-dialog input{font-size:16px}
-.rename-project-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:24px}
-.rename-project-actions button{min-height:44px}
+:is(.rename-project-dialog,.rename-paper-dialog){position:fixed;inset:0;height:fit-content;border:1px solid #c1ccba;color:inherit;max-width:calc(100vw - 32px);margin:auto}
+:is(.rename-project-dialog,.rename-paper-dialog)::backdrop{background:#17241a60;backdrop-filter:blur(3px)}
+:is(.rename-project-dialog,.rename-paper-dialog) input{font-size:16px}
+:is(.rename-project-actions,.rename-paper-actions){display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:24px}
+:is(.rename-project-actions,.rename-paper-actions) button{min-height:44px}
 .paper-file-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:28px;height:28px;color:#607459;margin-top:4px}
 .paper-file-icon svg{width:24px;height:24px}
 .paper-file-status{display:inline-block;font-size:10px;line-height:1.5;margin-top:5px;color:#53674c;background:#eaf0e3;border:1px solid #d4deca;border-radius:4px;padding:2px 6px}
@@ -112,8 +112,10 @@
 .paper-row:focus{outline:2px solid #627b51;outline-offset:3px}
 
 /* Compact library controls keep desktop actions and mobile reading space. */
-.library-direct-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.mobile-paper-menu,.mobile-list-actions,.mobile-state,.mobile-organize-heading{display:none}
+.mobile-list-actions,.mobile-state{display:none}
+.paper-actions-menu{margin-left:auto}
+.paper-organize-heading{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.paper-organize-heading button{min-width:44px;min-height:44px;font-size:20px;background:transparent;border:0}
 .paper-selection{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:16px}
 .paper-selection input{accent-color:#496a4a;margin:0}
 .action-menu{position:relative}
@@ -168,14 +170,13 @@
   .project-label,.tag-label{font-size:11px;line-height:1.4;padding:3px 6px;overflow-wrap:anywhere;max-width:100%;color:#48603e}
   .tag-label{color:#655b3d}
   .library-paper-controls{margin:0;gap:0}
-  .library-direct-actions{display:none}
-  .mobile-paper-menu{display:block;position:absolute;top:8px;right:0}
+  .paper-actions-menu{display:block;position:absolute;top:8px;right:0}
   .library-paper-controls>span[data-save-state=Saved]{display:none}
   .library-paper-controls>span[role=status]{font-size:12px;padding:8px 0;color:#48603e}
   .library-paper-controls>.alert{margin:10px 0 0;font-size:14px}
   .library-paper-controls>section{margin-top:12px;border:1px solid var(--line);border-radius:6px;padding:12px;background:#f4f6ef}
-  .mobile-organize-heading{display:flex;justify-content:space-between;align-items:center;font-size:14px}
-  .mobile-organize-heading button{min-width:44px;min-height:44px;font-size:20px;background:transparent;border:0}
+  .paper-organize-heading{display:flex;justify-content:space-between;align-items:center;font-size:14px}
+  .paper-organize-heading button{min-width:44px;min-height:44px;font-size:20px;background:transparent;border:0}
   .paper-labels label,.pdf-filename-editor label{font-size:14px}
   .paper-labels legend{font-size:14px;color:#48603e}
   .paper-labels .hint,.pdf-filename-editor .hint{font-size:12px;color:#52624e}
@@ -202,6 +203,5 @@
   .modal .hint{font-size:12px;color:#52624e}
   .dropzone input{width:100%;max-width:100%;font-size:14px!important}
 }
-.library-direct-actions>button{font-size:11px;min-height:36px}
 @media(max-width:760px){.paper-meta-empty{display:none}.sidebar .chip{min-width:44px}}
 @media(max-width:760px){.empty .primary,.library-main .alert button{min-height:44px;min-width:44px;font-size:14px}}

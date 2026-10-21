@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api, patch, type Label, type Library, type PaperDetail, type SavePaper } from './api';
 import { ActionMenu } from './action-menu';
 import { AssignmentCheckbox } from './assignment-checkbox';
@@ -8,6 +9,60 @@ const message = (error: unknown) => error instanceof Error ? error.message : Str
 export const deletePaper = (paper: PaperDetail) => api(`/api/papers/${paper.id}`, {
     method: 'DELETE', body: JSON.stringify({ confirmation: paper.id, revision: paper.revision }),
 });
+
+function RenamePaperDialog({ paper, onSave, onReload, onClose }: {
+    paper: PaperDetail; onSave: SavePaper; onReload: () => Promise<PaperDetail>; onClose: () => void;
+}) {
+    const dialog = useRef<HTMLDialogElement>(null), input = useRef<HTMLInputElement>(null);
+    const titleId = useId(), hintId = useId(), errorId = useId();
+    const [title, setTitle] = useState(paper.title);
+    const [busy, setBusy] = useState(false), [paused, setPaused] = useState(false);
+    const [error, setError] = useState('');
+    useEffect(() => {
+        const element = dialog.current!;
+        element.showModal(); input.current?.select();
+        return () => {
+            element.close();
+            const trigger = document.getElementById(`paper-row-${paper.id}`)?.querySelector<HTMLButtonElement>('.paper-menu-trigger');
+            (trigger || document.querySelector<HTMLInputElement>('[aria-label="Search library"]'))?.focus();
+        };
+    }, [paper.id]);
+    const submit = async () => {
+        if (busy || paused) return;
+        const name = title.trim();
+        if (!name || name.length > 2000) {
+            setError(!name ? 'Enter a paper title.' : 'Use 2000 characters or fewer.'); input.current?.focus(); return;
+        }
+        setBusy(true); setError('');
+        try { await onSave({ title: name }); onClose(); }
+        catch (error) { setError(message(error)); setPaused(true); }
+        finally { setBusy(false); }
+    };
+    const reload = async () => {
+        setBusy(true);
+        try { const latest = await onReload(); setTitle(latest.title); setPaused(false); setError(''); input.current?.focus(); }
+        catch (error) { setError(message(error)); }
+        finally { setBusy(false); }
+    };
+    return createPortal(<dialog ref={dialog} className="modal rename-paper-dialog" aria-labelledby={titleId} aria-describedby={hintId} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} onKeyDown={event => {
+        if (event.key !== 'Tab') return;
+        const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('input, button:not([disabled])')];
+        const first = controls[0], last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }} onClick={event => {
+        const bounds = dialog.current!.getBoundingClientRect();
+        if (!busy && event.target === dialog.current && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom)) onClose();
+    }}>
+        <form noValidate onSubmit={event => { event.preventDefault(); void submit(); }}>
+            <h2 id={titleId}>Rename paper</h2>
+            <p className="hint" id={hintId}>Change the paper title shown in your library and reader. The PDF filename and original file stay the same.</p>
+            <label>Paper title<input ref={input} autoFocus aria-label="Paper title" aria-invalid={!!error} aria-describedby={error ? `${hintId} ${errorId}` : hintId} value={title} readOnly={busy} onChange={event => { setTitle(event.target.value); if (!paused) setError(''); }}/></label>
+            {error && <p className="alert" id={errorId} role="alert">{error}</p>}
+            <div className="rename-paper-actions"><button type="button" disabled={busy} onClick={onClose}>Cancel</button>{paused && <button type="button" disabled={busy} onClick={() => void reload().catch(() => {})}>Reload latest paper</button>}<button type="submit" className="primary" disabled={busy || paused}>{busy ? 'Saving…' : 'Save title'}</button></div>
+        </form>
+    </dialog>, document.body);
+}
 
 export function PdfFilenameEditor({ paper, onSave, disabled = false }: {
     paper: PaperDetail; onSave: SavePaper; disabled?: boolean;
@@ -123,6 +178,7 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
     const [state, setState] = useState('Saved');
     const [error, setError] = useState('');
     const [expanded, setExpanded] = useState(false);
+    const [renaming, setRenaming] = useState(false);
     const [removing, setRemoving] = useState(false);
     const editor = useRef<HTMLElement>(null);
     const editorFocus = useRef<'organize' | 'filename' | null>(null);
@@ -160,9 +216,11 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
     const reload = async () => {
         await queue.current;
         try {
-            update(await api<PaperDetail>(`/api/papers/${paper.id}`));
+            const latest = await api<PaperDetail>(`/api/papers/${paper.id}`);
+            update(latest);
             failed.current = false; setError(''); setState('Saved'); await onChanged();
-        } catch (error) { setError(message(error)); }
+            return latest;
+        } catch (error) { setError(message(error)); throw error; }
     };
     const remove = async () => {
         setRemoving(true);
@@ -174,8 +232,9 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
         finally { setRemoving(false); }
     };
     return <div className="library-paper-controls">
-        <div className="mobile-paper-menu"><ActionMenu label={`Actions for paper ${paper.title}`}>{close => <>
+        <div className="paper-actions-menu"><ActionMenu label={`Actions for paper ${paper.title}`}>{close => <>
             <button role="menuitem" tabIndex={-1} onClick={() => { close(); expand('organize'); }}>Organize paper</button>
+            <button role="menuitem" tabIndex={-1} disabled={failed.current || removing || state === 'Saving…'} onClick={() => { close(); setRenaming(true); }}>Rename paper</button>
             {paper.pdfSha && <button role="menuitem" tabIndex={-1} onClick={() => { close(); expand('filename'); }}>Rename PDF</button>}
             <button role="menuitem" tabIndex={-1} disabled={failed.current || removing || state === 'Saving…'} onClick={() => { close(); void save({ archived: !paper.archived }).catch(error => setError(message(error))); }}>{paper.archived ? 'Return to library' : 'Archive paper'}</button>
             {paper.archived && <button role="menuitem" tabIndex={-1} className="danger" disabled={failed.current || removing || state === 'Saving…'} onClick={() => {
@@ -183,12 +242,9 @@ export function LibraryPaperControls({ initial, labels, onChanged, onDeleted }: 
                 if (confirm(`Permanently delete “${paper.title}”? This irreversibly removes this paper, its original PDF, notes, highlights, reading position and all project/tag assignments. Projects, tags and other papers are kept. This cannot be undone.`)) void remove().catch(error => setError(message(error)));
             }}>Permanently delete</button>}
         </>}</ActionMenu></div>
-        <div className="library-direct-actions">
-        <button aria-expanded={expanded} aria-controls={`organize-${paper.id}`} onClick={() => setExpanded(!expanded)}>Organize paper</button>
-        <PaperActions paper={paper} onSave={save} disabled={failed.current} onError={setError} onDelete={remove}/>
-        </div>
         <span role="status" data-save-state={state}>{state}</span>
-        {error && <div className="alert" role="alert">{error}<button onClick={() => void reload()}>Reload latest</button></div>}
-        {expanded && <section ref={editor} tabIndex={-1} id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><div className="mobile-organize-heading"><strong>Organize paper</strong><button aria-label="Close paper organizer" onClick={() => { setExpanded(false); document.getElementById(`paper-row-${paper.id}`)?.querySelector<HTMLButtonElement>('.paper-menu-trigger')?.focus(); }}>×</button></div><PdfFilenameEditor paper={paper} onSave={save} disabled={failed.current}/><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
+        {error && <div className="alert" role="alert">{error}<button onClick={() => void reload().catch(() => {})}>Reload latest</button></div>}
+        {renaming && <RenamePaperDialog paper={paper} onSave={save} onReload={reload} onClose={() => setRenaming(false)}/>}
+        {expanded && <section ref={editor} tabIndex={-1} id={`organize-${paper.id}`} aria-label={`Organize ${paper.title}`}><div className="paper-organize-heading"><strong>Organize paper</strong><button aria-label="Close paper organizer" onClick={() => { setExpanded(false); document.getElementById(`paper-row-${paper.id}`)?.querySelector<HTMLButtonElement>('.paper-menu-trigger')?.focus(); }}>×</button></div><PdfFilenameEditor paper={paper} onSave={save} disabled={failed.current}/><PaperLabels paper={paper} labels={labels} onSave={save} onLabels={onChanged} onError={setError}/></section>}
     </div>;
 }

@@ -152,14 +152,14 @@ export async function mobileLibraryChecks(browser, base) {
     await menuClosed(trigger, menu, search);
     await trigger.click(); await focused(organize); await search.focus();
     await menuClosed(trigger, menu, search);
-    // Crossing the desktop breakpoint hides the trigger: dismiss, retain the
-    // paper's keyboard position, and do not reopen on return to mobile.
+    // The same actions stay visible and retain focus across the desktop breakpoint.
     await trigger.click(); await focused(organize);
     await resizeMenuViewport(page, { width: 768, height: 844 });
-    await menuClosed(trigger, menu, row);
+    await focused(organize, 'Desktop breakpoint keeps the same focused menu');
+    assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
     await resizeMenuViewport(page, { width: 430, height: 844 });
-    assert.equal(await menu.count(), 0);
-    assert.equal(await trigger.getAttribute('aria-expanded'), 'false');
+    await focused(organize, 'Return to mobile keeps the focused menu');
+    await page.keyboard.press('Escape'); await menuClosed(trigger, menu);
     // Search and both real API-backed filters; include an empty result.
     await page.getByLabel('Search library', { exact: true }).fill('Mobile reading collection');
     await longRow.waitFor({ state: 'detached' }); await row.waitFor();
@@ -247,9 +247,12 @@ export async function mobileLibraryChecks(browser, base) {
     for (const width of [768, 1024, 1366]) {
       await page.setViewportSize({ width, height: 1000 });
       await bounds(page);
-      assert.equal(await row.getByRole('button', { name: 'Organize paper', exact: true }).isVisible(), true);
+      await trigger.click();
+      for (const action of ['Organize paper', 'Rename paper', 'Rename PDF', 'Archive paper'])
+        assert.equal(await row.getByRole('menuitem', { name: action, exact: true }).isVisible(), true);
+      await page.keyboard.press('Escape');
       assert.equal(await row.locator('.paper-selection').isVisible(), true);
-      assert.equal(await row.locator('.paper-menu-trigger').isVisible(), false);
+      assert.equal(await row.locator('.paper-menu-trigger').isVisible(), true);
       assert.equal(await page.locator('.export-actions').isVisible(), true);
       await page.screenshot({ path: `test-results/library-responsive-${width}.png`, fullPage: true });
     }

@@ -221,6 +221,31 @@ test('PDF filename editing is independent, revision-aware and preserves bytes, i
     assert.deepEqual(store.annotations(p.id), annotations);
     assert.deepEqual(store.pdfBytes(p.pdfSha!), fileBytes);
 });
+test('paper title rename preserves filenames and related data, rejects stale edits and persists after reopening', async () => {
+    const p = await paper(), project = await addLabel('projects', 'Title project'), tag = await addLabel('tags', 'Title tag');
+    store.patch(p.id, { revision: p.revision, pdfFilename: 'Original download.pdf', projectIds: [project.id], tagIds: [tag.id], note: 'Keep notes', position: { page: 2, offset: .4 } });
+    store.addAnnotation(p.id, { page: 1, quote: 'Keep passage', rects: [[.1, .1, .4, .2]], color: 'green', comment: 'Keep comment' });
+    const before = store.get(p.id), annotations = store.annotations(p.id), bytes = store.pdfBytes(p.pdfSha!);
+    const route = `/api/papers/${p.id}`;
+    for (const title of ['', '   ', 'x'.repeat(2001)]) {
+        assert.equal((await request(route, 'PATCH', { revision: before.revision, title })).status, 400);
+        assert.deepEqual(store.get(p.id), before);
+    }
+    const response = await request(route, 'PATCH', { revision: before.revision, title: '  A bibliographic title  ' });
+    assert.equal(response.status, 200);
+    const renamed = await response.json();
+    const expected = { ...before, title: 'A bibliographic title', revision: before.revision + 1, updated: renamed.updated };
+    assert.deepEqual(store.get(p.id), expected);
+    assert.equal((await request(route, 'PATCH', { revision: before.revision, title: 'Stale title' })).status, 409);
+    assert.deepEqual(store.get(p.id), expected);
+    assert.deepEqual((await (await request('/api/library')).json()).papers.find((paper: { id: string }) => paper.id === p.id), expected);
+    assert.deepEqual(store.annotations(p.id), annotations);
+    store.close(); store = new Store(directory);
+    assert.deepEqual(store.get(p.id), expected);
+    assert.deepEqual(store.annotations(p.id), annotations);
+    assert.deepEqual(store.pdfBytes(p.pdfSha!), bytes);
+    assert.deepEqual(readdirSync(store.files), [`${p.pdfSha}.pdf`]);
+});
 test('unsafe PDF filenames are rejected atomically at API and store boundaries', async () => {
     const p = await paper();
     for (const pdfFilename of ['', ' ', 'no-extension', '.pdf', '.hidden.pdf', '../escape.pdf', 'a/b.pdf', 'a\\b.pdf', 'bad..pdf', 'bad".pdf', 'bad:.pdf', 'bad?.pdf', 'bad*.pdf', 'bad|.pdf', 'bad<.pdf', 'bad>.pdf', 'bad\r\n.pdf', 'bad.pdf\n', 'bad\0.pdf', 'bad\u007f.pdf', 'bad\u0085.pdf', 'bad\u202e.pdf', 'bad\ud800.pdf', 'CON.pdf', 'lpt1.extra.pdf', 'trailing .pdf', 'x'.repeat(237) + '.pdf', 'é'.repeat(119) + '.pdf']) {

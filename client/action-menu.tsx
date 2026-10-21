@@ -36,7 +36,7 @@ export function ActionMenu({ label, children }: { label: string; children: (clos
     return <div ref={root} className="action-menu" onKeyDown={event => {
         if (event.key === 'Escape' && open) { event.preventDefault(); event.stopPropagation(); close(); }
     }}>
-        <button ref={trigger} className="paper-menu-trigger" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { last.current = false; if (open) close(); else setOpen(true); }} onKeyDown={event => {
+        <button ref={trigger} className="paper-menu-trigger" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { last.current = false; if (open) close(); else setOpen(true); }} onKeyDown={event => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); last.current = event.key === 'ArrowUp'; setOpen(true); }
         }}><span aria-hidden="true">⋮</span></button>
         {open && <div ref={items} id={id} role="menu" aria-label={label} className="paper-menu" onKeyDown={event => {
