@@ -40,6 +40,7 @@ export async function importLibraryChecks(browser, base) {
     return row;
   };
   let releaseStale = () => {};
+  let releaseReveal = () => {};
   try {
     // Seed remote identities into the disposable empty server, avoiding provider
     // network calls. Real new-provider responses are covered by the API fixtures.
@@ -97,8 +98,24 @@ export async function importLibraryChecks(browser, base) {
     await dialog.getByRole('alert').filter({ hasText: 'Import fixture unavailable' }).waitFor();
     assert.equal(await reference.inputValue(), doi.doi);
     assert.equal(await dialog.isVisible(), true);
-    await page.unroute('**/api/import', rejectReference); await submit();
+    await page.unroute('**/api/import', rejectReference);
+    // A confirmed import first paints a temporary one-row list. Hold the real
+    // refresh, then put the DOI after tall preceding rows to reproduce the race
+    // independently of network speed and viewport height.
+    const revealGate = new Promise(resolve => { releaseReveal = resolve; });
+    const holdReveal = async route => { const response = await route.fetch(); await revealGate; await route.fulfill({ response }); };
+    await page.route('**/api/library?*', holdReveal);
+    const revealRefresh = page.waitForRequest(request => request.url().includes('/api/library?') && new URL(request.url()).searchParams.get('scope') === 'active');
+    await submit(); await revealRefresh;
+    await dialog.waitFor({ state: 'detached' });
+    await page.addStyleTag({ content: '.paper-row { min-height: 500px !important; } .paper-list { overflow-anchor: none; }' });
+    const refreshed = page.waitForResponse(response => response.url().includes('/api/library?') && new URL(response.url()).searchParams.get('scope') === 'active');
+    releaseReveal(); await refreshed;
+    await page.waitForFunction(() => document.querySelectorAll('.paper-row').length === 3);
     const referenceRow = await assertReveal(doi.id, 'Your library');
+    await page.unroute('**/api/library?*', holdReveal);
+    assert.equal(await referenceRow.evaluate(el => el.getBoundingClientRect().top >= 0 && el.getBoundingClientRect().top < innerHeight), true, 'the final DOI row is revealed after preceding rows arrive');
+    await page.locator('style').filter({ hasText: '.paper-row { min-height: 500px !important; } .paper-list { overflow-anchor: none; }' }).evaluate(el => el.remove());
     await referenceRow.getByText('Reference only', { exact: true }).waitFor();
     assert.match(await page.locator('.notice').innerText(), /Existing paper reused.*Reference saved without a PDF/);
     assert.deepEqual((await detail(doi.id)).projectIds, [projects[1].id], 'no requested projects leaves existing assignments intact');
@@ -143,7 +160,7 @@ export async function importLibraryChecks(browser, base) {
     await page.screenshot({ path: 'test-results/import-reveal-failure.png', fullPage: true }).catch(() => {});
     throw error;
   } finally {
-    releaseStale();
+    releaseStale(); releaseReveal();
     // Only this disposable server's Import fixtures are removed.
     for (const paper of [...(await library()).papers, ...(await library('archive')).papers].filter(p => p.title.startsWith('Import '))) {
       const archived = paper.archived ? paper : await context.request.patch(`${base}/api/papers/${paper.id}`, { data: { revision: paper.revision, archived: true } }).then(json);

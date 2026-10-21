@@ -565,3 +565,25 @@ previous production import failure remains unresolved and production was untouch
 The additional UX requirements from `NEXT-CHANGES.md` are implemented with
 regressions and specification updates; the untracked requirements note was removed.
 This feature adds no migration and is reversible independently of filename data.
+
+## Import reveal refresh race (2026-10-21)
+
+Code diagnosis of the reported DOI retry timeout: success painted and focused a
+single confirmed row and consumed the pending reveal before the list refresh.
+The DOI duplicate with no requested projects keeps its old updated timestamp;
+newer papers arriving in the refresh precede it and can push the focused row
+outside the viewport. The visibility assertion correctly detects that failure.
+Reveal now waits for the latest accepted library refresh commit, or its error,
+before focusing and scrolling. Stale responses still cannot trigger reveal;
+a failed refresh still reveals the confirmed import. Reimporting the same ID
+creates a fresh request. Later ordinary refreshes do not steal focus.
+
+The DOI retry regression gates real library responses and makes preceding rows
+500 px tall, waits for the complete list, then requires both actual row focus
+and viewport visibility. Existing meaningful assertions remain intact.
+
+Validation: `npm run verify` passed (50 tests, types, lint, build). Browser runs
+cannot execute UI assertions here: loopback binding returns EPERM and Chromium
+terminates with sandbox_host_linux.cc / Operation not permitted. The race is
+identified from the state/refresh sequence; a successful host rerun is still
+required to confirm browser behavior. No production changes.

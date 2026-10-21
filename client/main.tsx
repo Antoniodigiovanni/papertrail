@@ -28,6 +28,7 @@ function App() {
     const [ready, setReady] = useState(false);
     const [revealed, setRevealed] = useState('');
     const pendingReveal = useRef<string | null>(null);
+    const [revealRequest, setRevealRequest] = useState<{ id: string } | null>(null);
     const libraryRequest = useRef(0);
     const filters = useRef({ project, tag, scope, search, status });
     filters.current = { project, tag, scope, search, status };
@@ -42,20 +43,27 @@ function App() {
             if (project && project !== 'unassigned' && !next.projects.some(p => p.id === project)) setProject('');
             if (tag && !next.tags.some(t => t.id === tag)) setTag('');
             setReady(true);
+            if (pendingReveal.current) setRevealRequest({ id: pendingReveal.current });
         }
         catch (e) {
-            if (request === libraryRequest.current) setError(message(e));
+            if (request === libraryRequest.current) {
+                setError(message(e));
+                // The confirmed import is still present when the refresh fails.
+                if (pendingReveal.current) setRevealRequest({ id: pendingReveal.current });
+            }
         }
     }, []);
     useEffect(() => { void refresh(); }, [refresh, project, tag, scope, search, status]);
     useEffect(() => {
-        if (importOpen || pendingReveal.current !== revealed) return;
-        const row = document.getElementById(`paper-row-${revealed}`);
+        if (importOpen || !revealRequest || pendingReveal.current !== revealRequest.id) return;
+        // Wait for the authoritative list (or its error) before scrolling: adding
+        // the remaining rows can move the temporary single-row result offscreen.
+        const row = document.getElementById(`paper-row-${revealRequest.id}`);
         if (!row) return;
         pendingReveal.current = null;
         row.focus({ preventScroll: true });
         row.scrollIntoView({ block: 'center' });
-    }, [library.papers, importOpen, revealed]);
+    }, [revealRequest, importOpen]);
     const imported = (result: ImportResult, requestedProjects: string[]) => {
         const view = importLibraryView(result.paper, requestedProjects, project);
         // Invalidate older filter responses before revealing confirmed import data.
@@ -65,6 +73,7 @@ function App() {
         setSelected([]); setError(''); setMenu(false); setImportOpen(false);
         setNotice(importLibraryNotice(result));
         setLibrary(current => ({ ...current, papers: [result.paper], total: current.total + (!result.duplicate && !result.paper.archived ? 1 : 0) }));
+        setRevealRequest(null);
         setRevealed(result.paper.id); pendingReveal.current = result.paper.id;
         void refresh();
     };
