@@ -315,3 +315,8 @@
 .theme-toggle{width:44px;height:44px;flex:0 0 44px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:20px;line-height:1}
 .topbar .theme-toggle{background:transparent;border-color:transparent}
 .reader-header .theme-toggle{flex-shrink:0} /* Keep the theme control reachable in both headers. */
+/* Flat controls retain their hierarchy instead of inheriting filled buttons. */
+:root[data-theme="dark"] :is(.panel-tabs button,.passage,.project-menu button,.paper-menu>button,.paper-organize-heading button,.close-button,.mobile-list-actions>button){background:transparent}
+:root[data-theme="dark"] :is(.panel-tabs button,.project-menu button,.paper-menu>button):hover{background:#29372e}
+:root[data-theme="dark"] .nav.active{background:#2a3a30}
+:root[data-theme="dark"] .panel-tabs button.active{background:transparent}

@@ -30,6 +30,22 @@ export async function themeChecks(browser, base) {
     assert.equal(await page.locator('.paper-panel').evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(24, 32, 27)');
     assert.equal(await page.locator('.note-editor').evaluate(el => getComputedStyle(el).color), 'rgb(226, 232, 224)');
     assert.equal(await firstPage.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(255, 255, 255)');
+    const beforeZoom = await page.getByLabel('PDF zoom', { exact: true }).inputValue();
+    const gesture = await page.locator('.pdf-scroll').evaluate(root => {
+      const bounds = root.getBoundingClientRect();
+      const dispatch = (type, scale) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperties(event, { scale: { value: scale }, clientX: { value: bounds.left + bounds.width / 2 }, clientY: { value: bounds.top + 100 } });
+        root.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      return [dispatch('gesturestart', 1), dispatch('gesturechange', 1.5), dispatch('gestureend', 1.5)];
+    });
+    assert.deepEqual(gesture, [true, true, true], 'Safari gesture events are consumed within the PDF reader');
+    await page.waitForFunction(previous => Number(document.querySelector('[aria-label="PDF zoom"]')?.value) > Number(previous), beforeZoom);
+    await page.waitForFunction(() => document.querySelector('.pdf-page[data-page-number="1"] canvas')?.width > 0);
+    await page.locator('.panel-tabs').screenshot({ path: 'test-results/theme-tabs-after.png' });
+    assert.equal(await page.getByRole('button', { name: 'Highlights (0)', exact: true }).evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'dark tabs must not inherit filled button backgrounds');
     await page.setViewportSize({ width: 390, height: 844 });
     const readerToggle = await page.getByRole('button', { name: 'Disable dark mode', exact: true }).boundingBox();
     assert.ok(readerToggle && readerToggle.width >= 44 && readerToggle.height >= 44, 'reader theme control meets the mobile touch target');
