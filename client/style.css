@@ -240,3 +240,12 @@
 .paper-file-details .paper-filename{min-width:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pdf-thumbnail{flex-direction:column;font-size:8px;line-height:1}
 .pdf-thumbnail svg{width:22px;height:26px}
+
+/* The library leads with its work: title, add action, then the collection. */
+.sidebar .brand{margin-bottom:34px}
+.page-heading h1{margin:0}
+.page-heading{margin-bottom:28px}
+@media(max-width:760px){
+  .sidebar .brand{margin-bottom:24px}
+  .page-heading{margin-bottom:16px}
+}

@@ -52,6 +52,10 @@ try{
   const page=await context.newPage();const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
   const favicon=await context.request.get(`${base}/favicon.svg`);assert.equal(favicon.status(),200);assert.match(favicon.headers()['content-type'],/image\/svg\+xml/);assert.match(await favicon.text(),/<svg/);
   await page.goto(base);assert.equal(await page.locator('link[rel=icon]').getAttribute('href'),'/favicon.svg');await page.getByRole('heading',{name:'Your library',exact:true}).waitFor();
+  const initialCopy = await page.locator('body').innerText();
+  for (const decorative of ['Private library', 'Online-first · Saved on your server', 'COLLECT. CONNECT. UNDERSTAND.', 'Good ideas deserve a place to stay.', 'A little more understanding, every day.']) assert.equal(initialCopy.includes(decorative), false, `decorative copy removed: ${decorative}`);
+  assert.equal(await page.getByRole('heading',{name:'Your library',exact:true}).count(),1);
+  assert.equal(await page.getByRole('button',{name:'Add paper',exact:false}).count(),1);
   for(const name of ['Reading systems','Connected ideas']){
     page.once('dialog',dialog=>dialog.accept(name));await page.getByRole('button',{name:'New project',exact:true}).click();
     await page.getByRole('navigation',{name:'Projects',exact:true}).getByRole('button',{name,exact:true}).waitFor();
