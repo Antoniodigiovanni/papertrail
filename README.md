@@ -88,6 +88,7 @@ permissive CORS policy. `PUBLIC_ORIGIN` also checks browser mutation origins.
 
 ## Using the library
 
+- Use the sun/moon control in the library or reader header to switch between dark and light mode. Your choice is saved in this browser and carries into the reader.
 - Add a local PDF, arXiv ID/URL, or DOI/doi.org URL. Select any number of projects
   while importing. Success keeps you in the library, marks and scrolls to the paper,
   and focuses its row; press Enter or choose its title to open the reader.

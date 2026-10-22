@@ -6,6 +6,7 @@ import { importLibraryChecks } from './import-browser-checks.mjs';
 import { desktopLibraryChecks } from './desktop-library-checks.mjs';
 import { paperRenameChecks } from './paper-rename-checks.mjs';
 import { mobileLibraryChecks } from './mobile-library-checks.mjs';
+import { themeChecks } from './theme-browser-checks.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
@@ -32,7 +33,9 @@ try{
   if(!started)errors.push(`Live HTTP server could not start/reply:\n${serverOutput}`);
   try{browser=await (process.env.PAPERTRAIL_WEBKIT ? webkit : chromium).launch({headless:true});}catch(e){errors.push(`Browser could not launch:\n${e.message}`);}
   if(errors.length)throw new Error(errors.join('\n\n'));
-  if (process.env.PAPERTRAIL_THUMBNAILS_ONLY) {
+  if (process.env.PAPERTRAIL_THEME_ONLY) {
+    await themeChecks(browser, base);
+  } else if (process.env.PAPERTRAIL_THUMBNAILS_ONLY) {
     await thumbnailChecks(browser,base);
   } else {
   if (!process.env.PAPERTRAIL_PDF_COMPAT_ONLY) {
@@ -48,6 +51,7 @@ try{
   if (!process.env.PAPERTRAIL_LIBRARY_ONLY && !process.env.PAPERTRAIL_RESPONSIVE_ONLY) {
   await pdfStreamCompatibilityChecks(browser,base);
   if (!process.env.PAPERTRAIL_PDF_COMPAT_ONLY) {
+  await themeChecks(browser,base);
   const context=await browser.newContext({viewport:{width:1440,height:1000}});
   const page=await context.newPage();const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
   const favicon=await context.request.get(`${base}/favicon.svg`);assert.equal(favicon.status(),200);assert.match(favicon.headers()['content-type'],/image\/svg\+xml/);assert.match(await favicon.text(),/<svg/);

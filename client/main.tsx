@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { api, patch, type Library, type PaperDetail, type Label, type SavePaper } from './api';
 import type { PaperPatch } from '../server/schema';
@@ -11,6 +11,14 @@ import { PdfThumbnail } from './pdf-thumbnail';
 import './style.css';
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 function App() {
+    const [darkMode, setDarkMode] = useState(() => {
+        try { return localStorage.getItem('papertrail-theme') === 'dark'; } catch { return false; }
+    });
+    useLayoutEffect(() => {
+        document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+        try { localStorage.setItem('papertrail-theme', darkMode ? 'dark' : 'light'); } catch { /* Keep the in-memory choice if storage is unavailable. */ }
+    }, [darkMode]);
+    const toggleTheme = () => setDarkMode(value => !value);
     const [library, setLibrary] = useState<Library>({ papers: [], projects: [], tags: [], total: 0 });
     const [project, setProject] = useState('');
     const [tag, setTag] = useState('');
@@ -136,7 +144,7 @@ function App() {
         }
     };
     if (paper)
-        return <PaperWorkspace key={paper.id} initial={paper} initialNotice={notice} labels={library} onClose={() => { setPaper(null); window.history.replaceState(null, '', location.pathname); void refresh(); }} onLabels={refresh}/>;
+        return <PaperWorkspace key={paper.id} initial={paper} initialNotice={notice} labels={library} darkMode={darkMode} onToggleTheme={toggleTheme} onClose={() => { setPaper(null); window.history.replaceState(null, '', location.pathname); void refresh(); }} onLabels={refresh}/>;
     return <div className="shell">
     <aside id="library-sidebar" className={`sidebar ${menu ? 'is-open' : ''}`} onKeyDown={event => { if (event.key === 'Escape' && menu) { event.preventDefault(); setMenu(false); document.getElementById('navigation-toggle')?.focus(); } }}>
       <button className="mobile-nav-close" aria-label="Close navigation" onClick={() => { setMenu(false); document.getElementById('navigation-toggle')?.focus(); }}>×</button>
@@ -156,7 +164,7 @@ function App() {
         void restoreFile(f); e.target.value = ''; }}/></label></div>
     </aside>
     <main className="library-main">
-      <header className="topbar"><div className="topbar-left"><button id="navigation-toggle" className="mobile-menu" onClick={() => setMenu(!menu)} aria-label="Toggle navigation" aria-expanded={menu} aria-controls="library-sidebar">☰</button><span>Library <span className="slash">/</span> {scope === 'archive' ? 'Archive' : project === 'unassigned' ? 'Unassigned' : library.projects.find(p => p.id === project)?.name || 'All papers'}</span></div></header>
+      <header className="topbar"><div className="topbar-left"><button id="navigation-toggle" className="mobile-menu" onClick={() => setMenu(!menu)} aria-label="Toggle navigation" aria-expanded={menu} aria-controls="library-sidebar">☰</button><span>Library <span className="slash">/</span> {scope === 'archive' ? 'Archive' : project === 'unassigned' ? 'Unassigned' : library.projects.find(p => p.id === project)?.name || 'All papers'}</span></div><ThemeToggle darkMode={darkMode} onToggle={toggleTheme}/></header>
       <div className="content">
         <div className="page-heading"><h1>{scope === 'archive' ? 'Your archive' : project === 'unassigned' ? 'Unassigned papers' : library.projects.find(p => p.id === project)?.name || 'Your library'}</h1><button className="primary" onClick={() => setImportOpen(true)}>＋ Add paper</button></div>
         {error && <div className="alert" role="alert">{error}<button onClick={() => { setError(''); void refresh(); }}>Retry</button></div>}{notice && <div className="notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice('')}>×</button></div>}
@@ -173,6 +181,9 @@ function App() {
     {renaming && <RenameProjectDialog project={renaming} onClose={() => setRenaming(null)} onRenamed={renamedProject}/>}
     {importOpen && <ImportDialog projects={library.projects} project={project} onClose={() => setImportOpen(false)} onImported={imported}/>}
   </div>;
+}
+function ThemeToggle({ darkMode, onToggle }: { darkMode: boolean; onToggle: () => void }) {
+    return <button className="theme-toggle" type="button" aria-label={darkMode ? 'Disable dark mode' : 'Enable dark mode'} aria-pressed={darkMode} title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'} onClick={onToggle}><span aria-hidden="true">{darkMode ? '☀' : '☾'}</span></button>;
 }
 function ImportDialog({ projects, project, onClose, onImported }: {
     projects: Label[];
@@ -201,10 +212,12 @@ function ImportDialog({ projects, project, onClose, onImported }: {
     };
     return <div className="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="import-title" className="modal"><button className="close-button" aria-label="Close import" disabled={busy} onClick={onClose}>×</button><h2 id="import-title">Add a paper</h2><label className="dropzone"><span>↑</span><strong>{file ? file.name : 'Choose a PDF'}</strong><small>Original bytes preserved · Up to 40 MiB</small><input aria-label="Upload PDF" type="file" accept="application/pdf,.pdf" onChange={e => { setFile(e.target.files?.[0] || null); setReference(''); }}/></label><div className="or-divider">or import a reference</div><label>arXiv ID, DOI, or provider URL<input value={reference} onChange={e => { setReference(e.target.value); setFile(null); }} placeholder="2401.12345v2 or 10.1000/example"/></label><p className="hint">A reference stays useful even without a PDF. DOI import does not bypass publisher restrictions. A different arXiv version gets its own paper and highlights.</p><fieldset><legend>Add to projects <span className="quiet">(optional)</span></legend>{projects.map(p => <label className="check-label" key={p.id}><input type="checkbox" checked={projectIds.includes(p.id)} onChange={e => setProjectIds(e.target.checked ? [...projectIds, p.id] : projectIds.filter(id => id !== p.id))}/>{p.name}</label>)}{!projects.length && <p className="hint">You can assign projects after importing.</p>}</fieldset>{error && <p className="alert" role="alert">{error}</p>}<button className="primary wide" disabled={busy || (!file && !reference.trim())} onClick={() => void submit()}>{busy ? 'Importing…' : 'Add to library'}</button></section></div>;
 }
-function PaperWorkspace({ initial, initialNotice, labels, onClose, onLabels }: {
+function PaperWorkspace({ initial, initialNotice, labels, darkMode, onToggleTheme, onClose, onLabels }: {
     initial: PaperDetail;
     initialNotice: string;
     labels: Library;
+    darkMode: boolean;
+    onToggleTheme: () => void;
     onClose: () => void;
     onLabels: () => Promise<void>;
 }) {
@@ -329,7 +342,7 @@ function PaperWorkspace({ initial, initialNotice, labels, onClose, onLabels }: {
         throw e;
     } };
     const navigate = (a: Annotation, fromList = false) => { setJump({ page: a.page, offset: Math.max(0, Math.min(...a.rects.map(r => r[1])) - .08), token: Date.now() }); setActiveHighlight(a.id); setPanel(!(fromList && window.matchMedia('(max-width: 900px)').matches)); setTab('highlights'); };
-    return <div className="workspace"><header className="reader-header"><button onClick={() => void back()} aria-label="Back to library">← Library</button><div className="reader-heading"><strong>{paper.title}</strong><span>{paper.authors.join(', ') || 'Personal archive'}</span></div><span className={`save-state ${saveState === 'Save error' ? 'error' : ''}`} role="status">{saveState === 'Saved' ? '✓ ' : ''}{saveState}</span><button aria-controls="paper-panel" aria-expanded={panel && tab === 'details'} onClick={() => { setPanel(true); setTab('details'); }}>Organize paper</button><button id="paper-panel-toggle" onClick={() => setPanel(!panel)} aria-label="Toggle paper panel" aria-expanded={panel} aria-controls="paper-panel">{panel ? 'Close notes' : 'Notes'}</button></header>
+    return <div className="workspace"><header className="reader-header"><button onClick={() => void back()} aria-label="Back to library">← Library</button><div className="reader-heading"><strong>{paper.title}</strong><span>{paper.authors.join(', ') || 'Personal archive'}</span></div><span className={`save-state ${saveState === 'Save error' ? 'error' : ''}`} role="status">{saveState === 'Saved' ? '✓ ' : ''}{saveState}</span><button aria-controls="paper-panel" aria-expanded={panel && tab === 'details'} onClick={() => { setPanel(true); setTab('details'); }}>Organize paper</button><button id="paper-panel-toggle" onClick={() => setPanel(!panel)} aria-label="Toggle paper panel" aria-expanded={panel} aria-controls="paper-panel">{panel ? 'Close notes' : 'Notes'}</button><ThemeToggle darkMode={darkMode} onToggle={onToggleTheme}/></header>
     {error && <div className="workspace-alert alert" role="alert">{error}{conflict && <button onClick={() => void reload()}>Reload latest</button>}</div>}{initialNotice && <div className="workspace-notice notice" role="status">{initialNotice}</div>}
     <div className="workspace-body"><main className="reader-main">{paper.pdfSha ? <Reader paper={paper} jump={jump} onPosition={(position) => { if (!failed.current)
         safeSave({ position }); }} onHighlight={input => annotationChange(() => api(`/api/papers/${paper.id}/annotations`, { method: 'POST', body: JSON.stringify(input) }))} onSelectHighlight={a => navigate(a)}/> : <div className="reference-empty"><span className="empty-icon">↗</span><h1>{paper.title}</h1><p>{paper.abstract || 'Attach a PDF to start reading and highlighting.'}</p><label className="primary file-button">Attach PDF<input type="file" accept="application/pdf,.pdf" aria-label="Attach PDF" onChange={e => { const f = e.target.files?.[0]; if (f)
